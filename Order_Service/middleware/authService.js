@@ -1,6 +1,5 @@
-import jwt from "jsonwebtoken";
-import dotenv from "dotenv";
 import AppError from "../error/AppError.js";
+import dotenv from "dotenv";
 
 dotenv.config();
 
@@ -18,7 +17,7 @@ export const authenticate = (req, res, next) => {
   });
 };
 
-export const authorizationAdmin = (req, res, next) => {
+export const authRole = (req, res, next) => {
   if (req.user.role !== "admin") {
     return next(
       new AppError("You do not have permission to perform this action", 403)
