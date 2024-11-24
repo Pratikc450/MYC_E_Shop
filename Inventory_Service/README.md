@@ -1,2 +1,2 @@
-# MYC_E_Shop
+# Inventory Servcie
 Node Express Microservice Projects
