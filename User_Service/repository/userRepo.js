@@ -7,6 +7,15 @@ const registerRepo = async (userInfo) => {
         return newUser;  
 }
 
+const  fetchUser = async (email) => {
+    return db.findOne({email: email});
+
+}
+
+
+
+
 export default {
-    registerRepo
+    registerRepo,
+    fetchUser
 }

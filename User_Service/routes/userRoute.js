@@ -1,9 +1,9 @@
 import express from "express";
-
+import userController from "../controller/userController.js"
 const userRoute = express.Router();
 
-userRoute.post('/register',);
-userRoute.post('/login',);
+userRoute.post('/register',userController.register);
+userRoute.post('/login',userController.login);
 userRoute.post('/logout',);
 userRoute.get('/:userId',);
 userRoute.put('/:userId',);
