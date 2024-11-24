@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authRole } from "../middleware/authService.js";
+import { authRole } from "../middleware/authMiddleware.js";
 import {
   getAllOrdersController,
   getOrderController,
