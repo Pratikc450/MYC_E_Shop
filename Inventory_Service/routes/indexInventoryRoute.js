@@ -8,6 +8,7 @@ const indexInventoryRoute = express.Router();
 
 indexInventoryRoute.use("/items",itemInventoryRoute);
 indexInventoryRoute.use("/brands",brandInventoryRoute);
+//complete
 indexInventoryRoute.use("/sizes",sizeInventoryRoute);
 indexInventoryRoute.use("/colors",colorInventoryRoute);
 

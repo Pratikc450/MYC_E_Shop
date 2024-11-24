@@ -2,7 +2,7 @@ import db from "../database/db.js";
 import client from "../database/redisStorage/redisConnect.js";
 import AppError from "../exceptions/AppError.js";
 
-const addColor = async (color_id, color_name, created_at, updated_at) => {
+const addColor = async (color_id, color_name) => {
     const conn = await db.getConnection();
     try {
         await conn.beginTransaction();
@@ -17,14 +17,13 @@ const addColor = async (color_id, color_name, created_at, updated_at) => {
             throw new AppError("Color already exists.",401);
         }
         const [result] = await conn.execute(
-            'INSERT INTO tbl_item_color (color_id, color_name, created_at, updated_at) VALUES (?,?,?,?)',
-            [color_id, color_name, created_at, updated_at]
+            'INSERT INTO tbl_item_color (color_id, color_name) VALUES (?,?)',
+            [color_id, color_name]
         );
         console.log("Color added successfully!");
         await client.set(`ColorCache:${result.insertId}`, JSON.stringify({
-            "color_id": color_id, 
-            "ColorName": color_name,
-            "created at": created_at}), {
+            "color_id": color_id,
+            "ColorName": color_name}), {
                 EX: 900,
           });
         await conn.commit();
@@ -75,13 +74,13 @@ const getColorById = async(colorId) => {
     }
 }
 
-const updateColor = async(colorId, color_name, updated_at) => {
+const updateColor = async(colorId, color_name) => {
     const conn = await db.getConnection();
     try {
         await conn.beginTransaction();
         const [result] = await conn.execute(
-            `UPDATE tbl_item_color SET color_name =?, updated_at =? WHERE color_id =?`,
-            [color_name, updated_at, colorId]
+            `UPDATE tbl_item_color SET color_name =? WHERE color_id =?`,
+            [color_name, colorId]
         );
         if (result.affectedRows === 0) {
             throw new AppError("Color not found.",404);
@@ -89,8 +88,7 @@ const updateColor = async(colorId, color_name, updated_at) => {
         await client.del(`ColorCache:${colorId}`);
         await client.set(`ColorCache:${colorId}`, JSON.stringify({
             "color_id": colorId, 
-            "ColorName": color_name,
-            "updated at": updated_at}), {
+            "ColorName": color_name}), {
                 EX: 900,
           });
         await conn.commit();

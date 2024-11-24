@@ -3,11 +3,11 @@ import colorInventoryService from "../service/colorInventoryService.js";
 
 const addColor = async(req,res,next) => {
     try {
-        const { color_id, color_name, created_at, updated_at } = req.body;
-    if (!color_id || !color_name || !created_at || !updated_at) {
+        const { color_id, color_name} = req.body;
+    if (!color_id || !color_name) {
         throw new AppError("All fields are Required",404);
     }
-    const colorId = await colorInventoryService.addColor(color_id, color_name, created_at, updated_at);
+    const colorId = await colorInventoryService.addColor(color_id, color_name);
         if (!colorId) {
             throw new AppError("Failed to add Color", 400);
         }
@@ -45,14 +45,14 @@ const getColorById = async (req, res, next) => {
 const updateColorById = async (req, res, next) => {
     try {
         const { colorId } = req.params;
-        const { color_name,updated_at } = req.body;
+        const { color_name } = req.body;
         if (!colorId) {
             throw new AppError("Color ID is required", 404);
         }
-        if (!colorId || !color_name || !updated_at) {
+        if (!colorId || !color_name) {
             throw new AppError("No fields to update", 404);
         }
-        const updated = await colorInventoryService.updateColor(colorId, color_name,updated_at);
+        const updated = await colorInventoryService.updateColor(colorId, color_name);
         if (!updated) {
             throw new AppError("Failed to update Color", 400);
         }
