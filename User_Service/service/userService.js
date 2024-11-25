@@ -25,8 +25,6 @@ const loginService = async(email, password) => {
     
 
 
-
-
     if(!isMatch){
         throw new AppError('Invalid password',400);
     }
