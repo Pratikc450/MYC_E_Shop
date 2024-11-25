@@ -17,7 +17,7 @@ app.use(session({
 
 
 app.use(express.json({extended: true}));
-app.use('/users', userRoute)
+app.use('/api/users', userRoute)
 
 
 
