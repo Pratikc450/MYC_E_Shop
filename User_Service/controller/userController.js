@@ -34,6 +34,7 @@ const login = async(req, res, next) => {
         const rolelist = await roleService.addRoleService(id,name);
 
         if(rolelist){console.log("added to role list",id,name)}
+        
 
 
         

@@ -11,13 +11,13 @@ const obj = await db.find({});//get the first object and one and only enrty
 
 // if array empty insert this way
 if(obj[0]==undefined){
-    const crt = await db.create({
+    const crt1 = await db.create({
         entries: [
             info,
         ]
     })
     
-    return crt;
+    return crt1;
 
 }else if(obj[0]!==undefined){
     //find by id and update
