@@ -24,7 +24,6 @@ const loginService = async(email, password) => {
     const isMatch =  await bcrypt.compare(password,user.password);
     
 
-
     if(!isMatch){
         throw new AppError('Invalid password',400);
     }
