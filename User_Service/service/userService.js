@@ -30,6 +30,11 @@ const loginService = async(email, password) => {
     
     const acessToken =await generateAccessToken(user);
     const refreshToken = await generateRefreshToken(user);
+
+     
+
+
+
     return {acessToken, refreshToken, user};
 
 
@@ -77,6 +82,11 @@ const deleteUserService = async (userId)=>{
 }
 
 
+const getForgetPasswordService = async (uid)=>{
+    const ans = await userRepo.getForgotPassword(uid);
+    return ans;
+
+}
 
 
 
@@ -92,4 +102,5 @@ export default {
     getUaserService,
     editUserService,
     deleteUserService,
+    getForgetPasswordService,
 };

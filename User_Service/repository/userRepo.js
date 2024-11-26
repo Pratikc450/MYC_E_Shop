@@ -25,10 +25,19 @@ const deleteUser = async (id)=>{
     return await db.findByIdAndDelete(id);
 }
 
+
+const getForgotPassword = async (uid)=>{
+    // console.log('getForgotPassword repo')
+    return await db.findById(uid)
+}
+
+
+
 export default {
     registerRepo,
     fetchUser,
     getUserById,
     editUser,
-    deleteUser
+    deleteUser,
+    getForgotPassword
 }
