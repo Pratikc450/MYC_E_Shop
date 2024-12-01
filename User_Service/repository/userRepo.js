@@ -30,7 +30,9 @@ const getForgotPassword = async (uid)=>{
     // console.log('getForgotPassword repo')
     return await db.findById(uid)
 }
-
+const resetPassword = async () => {
+    
+}
 
 
 export default {
