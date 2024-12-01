@@ -9,7 +9,7 @@ const register = async(req,res,next) => {
     try{
     const ans = await userService.registerService(req.body);
         if(ans){
-            await sendRegisterMail(ans.email,ans.first_name,ans.last_name)
+             sendRegisterMail(ans.email,ans.first_name,ans.last_name)
         }
     res.status(201).json({ message: 'User created successfully',details: ans});
     }catch(err){
@@ -33,14 +33,13 @@ const login = async(req, res, next) => {
         req.session.save();
         //add to rolelist
         const {id ,name} = req.session.user.role
-
+        // ad in log in db 
         const rolelist = await roleService.addRoleService(id,name);
 
-        if(rolelist){console.log("added to role list",id,name)}
+        // if(rolelist){console.log("added to role list",id,name)}
 
 
-       
-
+    
         
         res.status(200).json({ messsage:"logged in succesful",token});
 
@@ -98,22 +97,51 @@ const delUser = async (req,res,next) => {
 const Forgot = async(req, res, next) => {
     try{  
         // const id  = req.params.uid;
-        const id = req.session.user?._id;
-        // console.log("in f got pass::::::::",s)
+        const id = req.session.user?._id.toString();
+        
         const pass = req.session.newpassword;
 
         const ans = await userService.getForgetPasswordService(id)
-        console.log(req.session)
-         sendFrofotPasswordMail(ans,pass);
-        res.status(200).json({message:"password is returned"});
+        // console.log(req.session);
+        if(ans){
+            sendFrofotPasswordMail(ans,pass);
+            res.status(200).json({message:"password is returned"});
+        }
+        //  sendFrofotPasswordMail(ans,pass);
+        res.status(500).json({message:"password not returned"});
 
     }catch(err){
         next(err);
     }
 }
 
+const LogOut =  async (req, res , next ) => {
+    try{
+        req.session.destroy(err => {
+             if (err) { return res.status(500).send('Failed to destroy session');
+
+              }
+         res.status(200).json({message:"user logged out"}); 
+        });
+        console.log("user succesfully log out");
+    }catch(err){
+        next(err);
+    }
+}
 
 
+const roles =  async (req, res , next ) => {
+    try{    
+        const userRole =  req.session.user?.role.name;
+        if (userRole){
+            res.status(200).json({role:userRole})
+        }
+        res.status(500).json({message:"User role not found"});
+    }catch(err){
+        next(err);
+    }
+
+}
 
 
 
@@ -125,4 +153,6 @@ export default {
     editUser,
     delUser,
     Forgot,
+    LogOut,
+    roles
 }   
