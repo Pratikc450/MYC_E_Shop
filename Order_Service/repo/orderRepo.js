@@ -20,12 +20,10 @@ export const addOrderRepo = async (
   shipping_address_id,
   billing_address_id,
   payment_status,
+  effective_date,
   items
 ) => {
   const conn = await pool.getConnection();
-  const effectiveDate = new Date(
-    new Date().setFullYear(new Date().getFullYear() + 10)
-  ).toISOString();
   try {
     const [result] = await conn.query(
       `INSERT INTO tbl_orders (user_id, order_date, status, total_amount, shipping_address_id, billing_address_id, payment_status, effective_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -37,13 +35,13 @@ export const addOrderRepo = async (
         shipping_address_id,
         billing_address_id,
         payment_status,
-        effectiveDate,
+        effective_date,
       ]
     );
-    for (let item in items) {
+    for (let item of items) {
       const total_price = item.price * item.quantity;
       await conn.query(
-        `INSERT INTO tbl_orders (order_id, item_id, quantity, price, total_price) VALUES (?, ?, ?, ?, ?)`,
+        `INSERT INTO tbl_order_items (order_id, item_id, quantity, price, total_price) VALUES (?, ?, ?, ?, ?)`,
         [result.insertId, item.item_id, item.quantity, item.price, total_price]
       );
     }
@@ -113,11 +111,12 @@ export const updateOrderRepo = async (
 };
 
 export const deleteOrderRepo = async (id) => {
-  const effectiveDate = new Date().toISOString();
+  const effectiveDate = new Date().toISOString().split("T")[0];
   const conn = await pool.getConnection();
   try {
     const [result] = await conn.query(
-      `UPDATE TBL_ORDERS SET status = cancelled, effective_date = ${effectiveDate} WHERE order_id = ${id};`
+      `UPDATE TBL_ORDERS SET status = ?, effective_date = ? WHERE order_id = ?`,
+      ["cancelled", effectiveDate, id]
     );
     await conn.commit();
     return result;
@@ -133,7 +132,7 @@ export const getAllItemsRepo = async (id) => {
   const [result] = await pool.query(
     `SELECT * FROM TBL_ORDER_ITEMS WHERE order_id = ${id}`
   );
-  return result[0];
+  return result;
 };
 
 export const makePaymentRepo = async (

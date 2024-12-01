@@ -18,9 +18,9 @@ router.get("/:orderId", authRole, getOrderController);
 router.post("/", authRole, addOrderController);
 router.put("/:orderId", authRole, updateOrderController);
 router.delete("/:orderId", authRole, deleteOrderController);
-router.get(":orderId/items", authRole, getAllItemsController);
-router.post(":orderId/payment", authRole, makePaymentController);
-router.post(":orderId/shipping", authRole, addShippingController);
-router.post(":orderId/shipping/status", authRole, updateShippingController);
+router.get("/:orderId/items", authRole, getAllItemsController);
+router.post("/:orderId/payment", authRole, makePaymentController);
+router.post("/:orderId/shipping", authRole, addShippingController);
+router.post("/:orderId/shipping/status", authRole, updateShippingController);
 
 export default router;

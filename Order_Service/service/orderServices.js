@@ -28,15 +28,22 @@ export const getOrderService = async (order_id) => {
 };
 
 export const addOrderService = async (data, user) => {
+  const effectiveDate = new Date(
+    new Date().setFullYear(new Date().getFullYear() + 10)
+  )
+    .toISOString()
+    .split("T")[0];
   try {
     return await addOrderRepo(
-      user.id,
+      user?.id || 1,
       data.order_date,
       data.status,
       data.total_amount,
       data.shipping_address_id,
       data.billing_address_id,
-      data.payment_status
+      data.payment_status,
+      effectiveDate,
+      data.items
     );
   } catch (error) {
     throw new AppError(error.message, 400);
@@ -47,7 +54,7 @@ export const updateOrderService = async (data, user, order_id) => {
   try {
     return await updateOrderRepo(
       order_id,
-      user.id,
+      user?.id || 1,
       data.order_date,
       data.status,
       data.total_amount,
