@@ -8,10 +8,14 @@ const addSize = async(req,res,next) => {
         throw new AppError("All fields are Required",404);
     }
     const sizeId = await sizeInventoryService.addSize(size_id, size_types, size_value);
-        if (!sizeId) {
-            throw new AppError("Failed to add Size", 400);
-        }
-        res.status(201).json({ message: 'Size added successfully.', sizeId });
+
+    if (sizeId.size_types) {
+        throw new AppError("Size already Exists", 400);
+    }
+    if(!sizeId){
+        throw new AppError("Failed to add Size", 400);
+    }
+    res.status(201).json({ message: 'Size added successfully.', sizeId });
     } catch (error) {
         console.error(error);
         next(error);
@@ -21,7 +25,7 @@ const addSize = async(req,res,next) => {
 const getAllSizes = async (req, res, next) => {
     try {
         const sizes = await sizeInventoryService.getAllSizes();
-        res.json(sizes);
+        res.status(200).json(sizes);
     } catch (error) {
         console.error(error);
         next(error);
@@ -35,7 +39,7 @@ const getSizeById = async (req, res, next) => {
         if (!size) {
             throw new AppError("Size not found", 404);
         }
-        res.json(size);
+        res.status(200).json(size);
     } catch (error) {
         console.error(error);
         next(error);
@@ -56,7 +60,7 @@ const updateSizeById = async (req, res, next) => {
         if (!updated) {
             throw new AppError("Failed to update Size", 400);
         }
-        res.json({ message: 'Size updated successfully.' });
+        res.status(200).json({ message: 'Size updated successfully.' });
     } catch (error) {
         console.error(error);
         next(error);
@@ -73,7 +77,7 @@ const deleteSizeById = async (req, res, next) => {
         if (!deleted) {
             throw new AppError("Failed to delete Size", 400);
         }
-        res.json({ message: 'Size deleted successfully.' });
+        res.status(200).json({ message: 'Size deleted successfully.' });
     } catch (error) {
         console.error(error);
         next(error);

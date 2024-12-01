@@ -13,7 +13,7 @@ const addSize = async (size_id, size_types, size_value) => {
         );
         if (existingSize[0]) {
             console.log(existingSize[0]);
-            throw new AppError("Size already exists.",401);
+            return existingSize[0];
         }
         const [result] = await conn.execute(
             'INSERT INTO tbl_item_size (size_id, size_types, size_value) VALUES (?,?,?)',
@@ -31,7 +31,6 @@ const addSize = async (size_id, size_types, size_value) => {
     } catch (error) {
         await conn.rollback();
         console.error("Error adding Size:", error);
-        throw new AppError("Error adding Size.",500);
     }
     finally {
         conn.release();

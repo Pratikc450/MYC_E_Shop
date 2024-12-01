@@ -24,7 +24,7 @@ const getAllBrands = async (req, res, next) => {
     try {
         const brands = await brandInventoryService.getAllBrands();
         console.log("GET ALL BRANDS");
-        res.json(brands);
+        res.status(200).json(brands);
     } catch (error) {
         console.error(error);
         next(error);
@@ -36,11 +36,11 @@ const getBrandById = async (req, res, next) => {
         const { brandId } = req.params;
         const brand = await brandInventoryService.getBrandById(brandId);
         if (!brand) {
-            throw new AppError("Brand not found", 404);
+            throw new AppError("Brand not found", 204);
         }
         console.log("BRAND GET BY ID");
         
-        res.json(brand);
+        res.status(200).json(brand);
     } catch (error) {
         console.error(error);
         next(error);
@@ -61,8 +61,8 @@ const updateBrandById = async (req, res, next) => {
         if (!updated) {
             throw new AppError("Failed to update Brand", 400);
         }
-        logger.info("Updated Brand");
-        res.json({ message: 'Brand updated successfully.' });
+        console.log("Updated Brand");
+        res.status(202).json({ message: 'Brand updated successfully.' });
     } catch (error) {
         console.error(error);
         next(error);
@@ -81,7 +81,7 @@ const deleteBrandById = async (req, res, next) => {
         }
         console.log("Successfully deleted");
         
-        res.json({ message: 'Brand deleted successfully.' });
+        res.status(202).json({ message: 'Brand deleted successfully.' });
     } catch (error) {
         console.error(error);
         next(error);

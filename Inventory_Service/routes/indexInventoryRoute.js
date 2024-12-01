@@ -7,8 +7,8 @@ import colorInventoryRoute from "./colorInventoryRoute.js";
 const indexInventoryRoute = express.Router();
 
 indexInventoryRoute.use("/items",itemInventoryRoute);
-indexInventoryRoute.use("/brands",brandInventoryRoute);
 //complete
+indexInventoryRoute.use("/brands",brandInventoryRoute);
 indexInventoryRoute.use("/sizes",sizeInventoryRoute);
 indexInventoryRoute.use("/colors",colorInventoryRoute);
 
