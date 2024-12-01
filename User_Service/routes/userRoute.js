@@ -10,7 +10,7 @@ userRoute.post('/register',userController.register);
 
 userRoute.post('/login',userController.login);
 
-userRoute.post('/logout',);
+userRoute.post('/logout',userController.LogOut);
 
 userRoute.get('/:userId',userController.getUserById);
 
@@ -18,7 +18,7 @@ userRoute.put('/:userId',auth.authenticate,userController.editUser);
 
 userRoute.delete('/:userId',auth.authenticate,userController.delUser);
 
-userRoute.get('/roles',);
+userRoute.get('/get/role',userController.roles);
 
 userRoute.get('/forgot/password',auth.authenticate,userController.Forgot);
 

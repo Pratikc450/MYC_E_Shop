@@ -20,15 +20,9 @@ const transporter = nodemailer.createTransport({
 
 export async function sendFrofotPasswordMail(userinfo, password) {
     
-    // const templateSource = fs.readFileSync('mail/email-template.html', 'utf-8').toString();
-    // const template = handlebars.compile(templateSource);
-
-
-    // const htmlToSend = template({ name: userinfo.name,password : userinfo.password});
-
 
     const mailOptions = {
-        from: "islamsavage8@gmail.com", 
+        from: `Myc E Shop <${process.env.EMAIL}>`, 
         to: userinfo.email,          
         subject: 'Welcome to MysEshop!',
         text: `Your password ` ,
