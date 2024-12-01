@@ -3,17 +3,20 @@ import AppError from "../error/AppError.js"
 import dotenv from 'dotenv';
 
 dotenv.config({ path: "./.env"}); // Specify a custom .env file path
-
-
+const jwtSecret = process.env.jwtSecret;
+const jwtRefreshSecret = process.env.jwtRefreshSecret;
+const jwtAccessExpire = process.env.jwtAccessExpire;
+const jwtRefreshExpire = process.env.jwtRefreshExpire;
 const authenticate = (req,res,next) => {
-    const token = req.headers.authorization;
+    const token = req.headers.auth;
     const refresh_token = req.headers['x-refresh-token'];
     
     
     // check if the session is valid or not --- check first 
-    if(!req.session.user){
-        return  next(new AppError('session expired ',400));
-    }
+    
+    // if(req.session.user== null){
+    //     return  next(new AppError('session expired ',400));
+    // }
     // check if token in req headers 
     if(!token){
         return  next(new AppError('Token not Present login please ',400));
@@ -29,7 +32,7 @@ const authenticate = (req,res,next) => {
                     }
                         /* if ref token is valid refdecoded contains info  
                         of user make another jwt accesstoken  form it */
-                    const newAccessToken =  jwt.sign({ id:user._id, email:user.email, role: user.role  },process.env.jwtSecret, { expiresIn :process.env.jwtAccessExpire});
+                    const newAccessToken =  jwt.sign({ id:user._id, email:user.email, role: user.role  }, jwtSecret, { expiresIn :process.env.jwtAccessExpire});
                     
                         //attach new token
                         res.setHeader('x-new-access-token',newAccessToken);
