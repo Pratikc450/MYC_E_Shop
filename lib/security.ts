@@ -36,9 +36,15 @@ export function getClientKey(request: Request) {
 
 export function isRateLimited(key: string) {
   const now = Date.now()
-  const current = requestBuckets.get(key)
+  if (requestBuckets.size > 5_000) {
+    for (const [bucketKey, bucket] of requestBuckets) {
+      if (bucket.resetAt <= now) requestBuckets.delete(bucketKey)
+    }
+  }
+  const boundedKey = key.slice(0, 160)
+  const current = requestBuckets.get(boundedKey)
   if (!current || current.resetAt <= now) {
-    requestBuckets.set(key, { count: 1, resetAt: now + WINDOW_MS })
+    requestBuckets.set(boundedKey, { count: 1, resetAt: now + WINDOW_MS })
     return false
   }
   current.count += 1
