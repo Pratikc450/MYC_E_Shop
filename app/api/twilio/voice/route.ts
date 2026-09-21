@@ -37,5 +37,6 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
-  return new Response(twiml('Welcome to the hospital voice assistant. Please tell me what information you need.'), { headers: { 'content-type': 'text/xml; charset=utf-8' } })
+  const id = requestId()
+  return new Response(twiml('Welcome to RHO Assist. I can provide registration, reception, doctor and department availability, medical testing, and report-status information. Please ask one question with a day and time when needed.'), { headers: { 'content-type': 'text/xml; charset=utf-8', 'cache-control': 'no-store', 'x-request-id': id, 'x-content-type-options': 'nosniff' } })
 }

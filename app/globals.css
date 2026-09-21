@@ -236,6 +236,63 @@
   animation: nova-pulse 3.2s ease-in-out infinite;
 }
 
+.rho-helpline-card {
+  position: relative;
+  overflow: hidden;
+  background: radial-gradient(circle at 88% 14%, oklch(0.78 0.19 190 / 0.28), transparent 28%), linear-gradient(145deg, oklch(0.98 0.04 225), oklch(1 0 0 / 0.8));
+  box-shadow: 0 1.4rem 2.8rem oklch(0.48 0.15 250 / 0.12), inset 0 1px 0 oklch(1 0 0 / 0.85);
+  transform-style: preserve-3d;
+}
+
+.rho-helpline-card::after {
+  content: '';
+  position: absolute;
+  width: 10rem;
+  height: 10rem;
+  right: -5rem;
+  bottom: -6rem;
+  border: 1px solid oklch(0.6 0.18 250 / 0.2);
+  border-radius: 50%;
+  transform: rotateX(64deg) rotateZ(-18deg);
+  pointer-events: none;
+}
+
+.rho-helpline-orbit {
+  position: absolute;
+  top: 0.9rem;
+  right: 1rem;
+  display: grid;
+  width: 3.1rem;
+  height: 3.1rem;
+  place-items: center;
+  border-radius: 50%;
+  background: linear-gradient(145deg, oklch(0.58 0.2 250), oklch(0.66 0.2 320) 55%, oklch(0.72 0.18 160));
+  color: white;
+  font: 700 0.55rem/1 var(--font-geist-mono), monospace;
+  letter-spacing: 0.12em;
+  box-shadow: 0 0.7rem 1.4rem oklch(0.5 0.2 275 / 0.28), inset 0 1px 1px oklch(1 0 0 / 0.5);
+  animation: rho-orbit 4s ease-in-out infinite;
+}
+
+.rho-helpline-orbit::before,
+.rho-helpline-orbit::after {
+  content: '';
+  position: absolute;
+  inset: -0.35rem;
+  border: 1px solid oklch(0.55 0.19 250 / 0.3);
+  border-radius: 50%;
+  transform: rotateX(68deg) rotateZ(22deg);
+}
+
+.rho-helpline-orbit::after { inset: -0.55rem; transform: rotateX(68deg) rotateZ(-32deg); opacity: 0.55; }
+
+.rho-helpline-number { text-shadow: 0 0.25rem 1rem oklch(0.5 0.18 250 / 0.16); }
+
+@keyframes rho-orbit {
+  0%, 100% { transform: perspective(400px) rotateY(-10deg) translateY(0); }
+  50% { transform: perspective(400px) rotateY(10deg) translateY(-4px); }
+}
+
 .nova-sidebar {
   background: linear-gradient(160deg, oklch(1 0 0 / 0.7), oklch(0.96 0.035 220 / 0.6));
   box-shadow: 0 1rem 2.8rem oklch(0.48 0.12 250 / 0.09);
@@ -326,7 +383,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .nova-shell::before, .nova-panel::after, .nova-orb, .nova-wave-bar, .nova-brand-mark, .schedule-live-dot, .schedule-track::after { animation: none; }
+  .nova-shell::before, .nova-panel::after, .nova-orb, .nova-wave-bar, .nova-brand-mark, .schedule-live-dot, .schedule-track::after, .rho-helpline-orbit { animation: none; }
   .nova-service-pill, .schedule-card { transition: none; }
   .nova-service-pill:hover, .schedule-card:hover { transform: none; }
 }
