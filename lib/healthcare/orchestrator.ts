@@ -158,7 +158,7 @@ export function clinicScheduleResponse(text: string): string | null {
     return formatWeeklyHours('Registration hours', REGISTRATION_HOURS, day, shift, hour)
   }
   if (asksReception) {
-    return formatWeeklyHours('Reception hours', REGISTRATION_HOURS, day, shift)
+    return formatWeeklyHours('Reception hours', REGISTRATION_HOURS, day, shift, hour)
   }
   if (/test|diagnostic|heart|cardiac|orthopedic|orthopaedic|bone|lung|lungs|pulmonary/i.test(text)) {
     const scope = day ? `${day}` : 'Monday through Sunday'
