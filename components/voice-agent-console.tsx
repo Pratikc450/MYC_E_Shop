@@ -46,6 +46,7 @@ export function VoiceAgentConsole() {
   const [voiceError, setVoiceError] = useState<string | null>(null)
   const [scheduleFocus, setScheduleFocus] = useState<{ day?: string; pulse: number }>({ pulse: 0 })
   const [speechCapabilities, setSpeechCapabilities] = useState({ input: false, output: false })
+  const [speechCapabilitiesReady, setSpeechCapabilitiesReady] = useState(false)
   const recognitionRef = useRef<SpeechRecognition | null>(null)
   const speechRef = useRef<SpeechSynthesisUtterance | null>(null)
   const messageCountRef = useRef(messages.length)
@@ -59,6 +60,7 @@ export function VoiceAgentConsole() {
       input: 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window,
       output: 'speechSynthesis' in window,
     })
+    setSpeechCapabilitiesReady(true)
   }, [])
 
   useEffect(() => {
@@ -249,7 +251,7 @@ export function VoiceAgentConsole() {
                 <VoiceAgentScene />
               </div>
               <p className="mt-7 font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">{mode === 'listening' ? 'Listening to your question' : mode === 'thinking' ? 'Thinking through your request' : mode === 'speaking' ? 'Arogya Assist is speaking · tap to interrupt' : 'Tap to ask Arogya Assist'}</p>{partialTranscript && <p className="mt-2 max-w-md text-center text-sm text-foreground/80" aria-live="polite">“{partialTranscript}”</p>}{(voiceError || error) && <p role="alert" className="mt-3 max-w-md text-center text-xs text-destructive">{voiceError || error}</p>}
-              <p className="mt-2 text-sm text-muted-foreground">{minutes}:{seconds} · {speechSupported && speechOutputSupported ? 'voice ready' : 'text fallback ready'}</p>
+              <p className="mt-2 text-sm text-muted-foreground">{minutes}:{seconds} · {!speechCapabilitiesReady ? 'checking voice support' : speechSupported && speechOutputSupported ? 'voice ready' : 'text fallback ready'}</p>
               <div className="mt-7 flex h-8 items-center gap-1" aria-label="Audio waveform">{Array.from({ length: 28 }).map((_, index) => <span key={index} style={{ animationDelay: `${index * 45}ms` }} className={`nova-wave-bar w-1 rounded-full bg-primary/70 transition-all ${mode === 'idle' ? 'h-1' : mode === 'thinking' ? (index % 2 ? 'h-3' : 'h-5') : index % 3 === 0 ? 'h-7' : index % 2 === 0 ? 'h-4' : 'h-2'}`} />)}</div>
             </div>
             <div className="flex items-center justify-center gap-3 border-t border-border bg-muted/20 p-4"><button onClick={() => { if (!muted) window.speechSynthesis?.cancel(); setMuted(!muted) }} className="rounded-full border border-border p-3 hover:bg-muted" aria-label={muted ? 'Unmute microphone' : 'Mute microphone'}>{muted ? <MicOff className="size-4" /> : <Mic className="size-4" />}</button><button onClick={toggleVoice} className={`flex size-14 items-center justify-center rounded-full ${mode === 'idle' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'bg-destructive text-destructive-foreground'} shadow-sm`} aria-label={mode === 'idle' ? 'Start voice session' : 'Stop voice session'}>{mode === 'idle' ? <Mic className="size-5" /> : <CircleStop className="size-5" />}</button><button className="rounded-full border border-border p-3 hover:bg-muted" aria-label="Audio output"><Volume2 className="size-4" /></button></div>
