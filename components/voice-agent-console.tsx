@@ -49,6 +49,9 @@ export function VoiceAgentConsole() {
   const speechRef = useRef<SpeechSynthesisUtterance | null>(null)
   const messageCountRef = useRef(messages.length)
   const thinkingTimerRef = useRef<number | null>(null)
+  const silenceTimerRef = useRef<number | null>(null)
+  const speechSupported = typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)
+  const speechOutputSupported = typeof window !== 'undefined' && 'speechSynthesis' in window
 
   useEffect(() => {
     if (mode === 'idle') return
@@ -103,6 +106,7 @@ export function VoiceAgentConsole() {
 
   useEffect(() => () => {
     recognitionRef.current?.stop()
+    if (silenceTimerRef.current) window.clearTimeout(silenceTimerRef.current)
     window.speechSynthesis?.cancel()
   }, [])
 
@@ -123,14 +127,15 @@ export function VoiceAgentConsole() {
 
   function startListening() {
     const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition
-    if (!SpeechRecognitionAPI) {
-      setVoiceError('Voice input is not supported here. Use the text box below instead.')
+    if (!SpeechRecognitionAPI || !speechSupported) {
+      setVoiceError('Voice input is not supported in this browser. Use the text box below instead.')
       return
     }
     setVoiceError(null)
+    if (silenceTimerRef.current) window.clearTimeout(silenceTimerRef.current)
     setPartialTranscript('')
     const recognition = new SpeechRecognitionAPI()
-    recognition.continuous = false
+    recognition.continuous = true
     recognition.interimResults = true
     recognition.lang = language
     recognition.onstart = () => setMode('listening')
@@ -144,18 +149,41 @@ export function VoiceAgentConsole() {
         if (results[index].isFinal) finalText += transcript
         else interim += transcript
       }
-      setPartialTranscript(interim || finalText)
+      const liveText = interim || finalText
+      setPartialTranscript(liveText)
+      if (liveText.trim()) {
+        if (silenceTimerRef.current) window.clearTimeout(silenceTimerRef.current)
+        silenceTimerRef.current = window.setTimeout(() => {
+          recognition.stop()
+          if (liveText.trim()) {
+            setPartialTranscript('')
+            setMode('thinking')
+            void sendMessage(liveText)
+          }
+        }, 1800)
+      }
       if (finalText.trim()) {
+        if (silenceTimerRef.current) window.clearTimeout(silenceTimerRef.current)
+        recognition.stop()
         setPartialTranscript('')
         setMode('thinking')
         void sendMessage(finalText)
       }
     }
-    recognition.onerror = () => {
+    recognition.onerror = (event?: Event) => {
+      if (silenceTimerRef.current) window.clearTimeout(silenceTimerRef.current)
       setMode('idle')
-      setVoiceError('Microphone access was unavailable. Check browser permissions or use text input instead.')
+      const code = (event as Event & { error?: string } | undefined)?.error
+      setVoiceError(code === 'not-allowed' || code === 'service-not-allowed'
+        ? 'Microphone permission was denied. Allow microphone access in your browser settings, or use the text box below.'
+        : code === 'audio-capture'
+          ? 'No microphone was detected. Connect a microphone or use the text box below.'
+          : 'Voice input stopped unexpectedly. Try again or use the text box below.')
     }
-    recognition.onend = () => setMode((current) => current === 'listening' ? 'idle' : current)
+    recognition.onend = () => {
+      if (silenceTimerRef.current) window.clearTimeout(silenceTimerRef.current)
+      setMode((current) => current === 'listening' ? 'idle' : current)
+    }
     recognitionRef.current = recognition
     try { recognition.start() } catch { setVoiceError('Microphone is already starting. Please try again.'); setMode('idle') }
   }
@@ -213,7 +241,7 @@ export function VoiceAgentConsole() {
                 <VoiceAgentScene />
               </div>
               <p className="mt-7 font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">{mode === 'listening' ? 'Listening to your question' : mode === 'thinking' ? 'Thinking through your request' : mode === 'speaking' ? 'Arogya Assist is speaking · tap to interrupt' : 'Tap to ask Arogya Assist'}</p>{partialTranscript && <p className="mt-2 max-w-md text-center text-sm text-foreground/80" aria-live="polite">“{partialTranscript}”</p>}{(voiceError || error) && <p role="alert" className="mt-3 max-w-md text-center text-xs text-destructive">{voiceError || error}</p>}
-              <p className="mt-2 text-sm text-muted-foreground">{minutes}:{seconds} · low-latency audio channel</p>
+              <p className="mt-2 text-sm text-muted-foreground">{minutes}:{seconds} · {speechSupported && speechOutputSupported ? 'voice ready' : 'text fallback ready'}</p>
               <div className="mt-7 flex h-8 items-center gap-1" aria-label="Audio waveform">{Array.from({ length: 28 }).map((_, index) => <span key={index} style={{ animationDelay: `${index * 45}ms` }} className={`nova-wave-bar w-1 rounded-full bg-primary/70 transition-all ${mode === 'idle' ? 'h-1' : mode === 'thinking' ? (index % 2 ? 'h-3' : 'h-5') : index % 3 === 0 ? 'h-7' : index % 2 === 0 ? 'h-4' : 'h-2'}`} />)}</div>
             </div>
             <div className="flex items-center justify-center gap-3 border-t border-border bg-muted/20 p-4"><button onClick={() => { if (!muted) window.speechSynthesis?.cancel(); setMuted(!muted) }} className="rounded-full border border-border p-3 hover:bg-muted" aria-label={muted ? 'Unmute microphone' : 'Mute microphone'}>{muted ? <MicOff className="size-4" /> : <Mic className="size-4" />}</button><button onClick={toggleVoice} className={`flex size-14 items-center justify-center rounded-full ${mode === 'idle' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'bg-destructive text-destructive-foreground'} shadow-sm`} aria-label={mode === 'idle' ? 'Start voice session' : 'Stop voice session'}>{mode === 'idle' ? <Mic className="size-5" /> : <CircleStop className="size-5" />}</button><button className="rounded-full border border-border p-3 hover:bg-muted" aria-label="Audio output"><Volume2 className="size-4" /></button></div>
