@@ -45,13 +45,21 @@ export function VoiceAgentConsole() {
   const [activeService, setActiveService] = useState<'registration' | 'doctors' | 'testing' | 'reception' | null>(null)
   const [voiceError, setVoiceError] = useState<string | null>(null)
   const [scheduleFocus, setScheduleFocus] = useState<{ day?: string; pulse: number }>({ pulse: 0 })
+  const [speechCapabilities, setSpeechCapabilities] = useState({ input: false, output: false })
   const recognitionRef = useRef<SpeechRecognition | null>(null)
   const speechRef = useRef<SpeechSynthesisUtterance | null>(null)
   const messageCountRef = useRef(messages.length)
   const thinkingTimerRef = useRef<number | null>(null)
   const silenceTimerRef = useRef<number | null>(null)
-  const speechSupported = typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)
-  const speechOutputSupported = typeof window !== 'undefined' && 'speechSynthesis' in window
+  const speechSupported = speechCapabilities.input
+  const speechOutputSupported = speechCapabilities.output
+
+  useEffect(() => {
+    setSpeechCapabilities({
+      input: 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window,
+      output: 'speechSynthesis' in window,
+    })
+  }, [])
 
   useEffect(() => {
     if (mode === 'idle') return
