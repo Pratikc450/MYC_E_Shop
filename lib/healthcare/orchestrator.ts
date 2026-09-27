@@ -14,10 +14,21 @@ function formatClockRange(value: string) {
 
 const weekdayPattern = /(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)/i
 
+function requestedDays(text: string) {
+  if (/\b(?:whole\s*week|entire\s*week|all\s*week|weekly)\b/i.test(text)) return undefined
+  const normalized = text.toLowerCase()
+  const range = normalized.match(/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s*(?:to|through|-|–)\s*(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/)
+  if (range) {
+    const start = WEEKDAYS.findIndex((day) => day.toLowerCase() === range[1])
+    const end = WEEKDAYS.findIndex((day) => day.toLowerCase() === range[2])
+    if (start >= 0 && end >= 0) return WEEKDAYS.slice(Math.min(start, end), Math.max(start, end) + 1)
+  }
+  const matches = WEEKDAYS.filter((day) => new RegExp(`\\b${day}\\b`, 'i').test(text))
+  return matches.length ? matches : undefined
+}
+
 function requestedDay(text: string) {
-  if (/\b(?:monday\s*(?:to|through|-|–)\s*sunday|whole\s*week|entire\s*week|all\s*week|weekly)\b/i.test(text)) return undefined
-  const match = text.match(weekdayPattern)
-  return match ? WEEKDAYS.find((day) => day.toLowerCase() === match[1].toLowerCase()) : undefined
+  return requestedDays(text)?.[0]
 }
 
 const departmentAliases: Record<string, string[]> = {
