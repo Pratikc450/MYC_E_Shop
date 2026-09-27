@@ -1,5 +1,6 @@
 import { generateText } from 'ai'
 import { clinicScheduleResponse, detectEmergency, emergencyResponse, lowConfidenceResponse } from '@/lib/healthcare/orchestrator'
+import { getClientKey, isPayloadTooLarge, isRateLimited, requestId, securityHeaders } from '@/lib/security'
 
 export const runtime = 'nodejs'
 
@@ -7,10 +8,11 @@ function xml(value: string) {
   return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&apos;')
 }
 
-function twiml(body: string) {
-  return new Response(`<?xml version="1.0" encoding="UTF-8"?><Response>${body}</Response>`, {
-    headers: { 'Content-Type': 'text/xml; charset=utf-8', 'Cache-Control': 'no-store' },
+function twiml(body: string, id = requestId()) {
+  const response = new Response(`<?xml version="1.0" encoding="UTF-8"?><Response>${body}</Response>`, {
+    headers: { 'Content-Type': 'text/xml; charset=utf-8' },
   })
+  return securityHeaders(response, id)
 }
 
 const TOLL_FREE_NUMBER = '1800-123-4567'
@@ -53,10 +55,17 @@ async function answerFor(message: string) {
 }
 
 export async function POST(request: Request) {
-  const params = new URLSearchParams(await request.text())
-  if (!(await isValidTwilioRequest(request, params))) return new Response('Forbidden', { status: 403 })
+  const id = requestId()
+  if (isPayloadTooLarge(request) || isRateLimited(`twilio:${getClientKey(request)}`)) {
+    return twiml('<Say language="en-IN" voice="Polly.Aditi">Please try again shortly.</Say><Hangup/>', id)
+  }
 
-  const speech = params.get('SpeechResult')?.trim()
+  const params = new URLSearchParams(await request.text())
+  if (!(await isValidTwilioRequest(request, params))) {
+    return securityHeaders(new Response('Forbidden', { status: 403 }), id)
+  }
+
+  const speech = params.get('SpeechResult')?.trim().slice(0, 1200)
   if (!speech) {
     return twiml(`${gather(`Welcome to Arogya Assist on ${TOLL_FREE_NUMBER}. I am available twenty-four hours a day, every day, for hospital information. Please ask about doctor availability, registration hours, reception timing, or medical testing for any day from Monday through Sunday, in the morning, afternoon, or evening.`)}`)
   }
