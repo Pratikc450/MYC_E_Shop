@@ -17,6 +17,7 @@ import {
   MicOff,
   MoreHorizontal,
   Paperclip,
+  PhoneCall,
   Play,
   Radio,
   Send,
@@ -29,12 +30,14 @@ import {
   Zap,
 } from 'lucide-react'
 
-type Mode = 'idle' | 'listening' | 'speaking'
+type Mode = 'idle' | 'listening' | 'thinking' | 'speaking'
 
 export function VoiceAgentConsole() {
   const [mode, setMode] = useState<Mode>('idle')
-  const { messages, isLoading, sendMessage, clearMessages } = useVoiceAgent()
+  const { messages, isLoading, error, sendMessage, clearMessages } = useVoiceAgent()
   const [draft, setDraft] = useState('')
+  const [partialTranscript, setPartialTranscript] = useState('')
+  const [language, setLanguage] = useState('en-US')
   const [connected, setConnected] = useState(true)
   const [elapsed, setElapsed] = useState(0)
   const [muted, setMuted] = useState(false)
@@ -43,10 +46,23 @@ export function VoiceAgentConsole() {
   const [activeService, setActiveService] = useState<'registration' | 'doctors' | 'testing' | 'reception' | null>(null)
   const [voiceError, setVoiceError] = useState<string | null>(null)
   const [scheduleFocus, setScheduleFocus] = useState<{ day?: string; pulse: number }>({ pulse: 0 })
+  const [speechCapabilities, setSpeechCapabilities] = useState({ input: false, output: false })
+  const [speechCapabilitiesReady, setSpeechCapabilitiesReady] = useState(false)
   const recognitionRef = useRef<SpeechRecognition | null>(null)
   const speechRef = useRef<SpeechSynthesisUtterance | null>(null)
   const messageCountRef = useRef(messages.length)
   const thinkingTimerRef = useRef<number | null>(null)
+  const silenceTimerRef = useRef<number | null>(null)
+  const speechSupported = speechCapabilities.input
+  const speechOutputSupported = speechCapabilities.output
+
+  useEffect(() => {
+    setSpeechCapabilities({
+      input: 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window,
+      output: 'speechSynthesis' in window,
+    })
+    setSpeechCapabilitiesReady(true)
+  }, [])
 
   useEffect(() => {
     if (mode === 'idle') return
@@ -101,38 +117,86 @@ export function VoiceAgentConsole() {
 
   useEffect(() => () => {
     recognitionRef.current?.stop()
+    if (silenceTimerRef.current) window.clearTimeout(silenceTimerRef.current)
     window.speechSynthesis?.cancel()
   }, [])
 
   function toggleVoice() {
-    if (mode !== 'idle') {
-      recognitionRef.current?.stop()
+    if (mode === 'speaking' || mode === 'thinking') {
       window.speechSynthesis?.cancel()
+      setMode('idle')
+      startListening()
+      return
+    }
+    if (mode === 'listening') {
+      recognitionRef.current?.stop()
       setMode('idle')
       return
     }
+    startListening()
+  }
 
+  function startListening() {
     const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition
-    if (!SpeechRecognitionAPI) {
-      setMode('speaking')
-      window.setTimeout(() => setMode('idle'), 2400)
+    if (!SpeechRecognitionAPI || !speechSupported) {
+      setVoiceError('Voice input is not supported in this browser. Use the text box below instead.')
       return
     }
-
+    setVoiceError(null)
+    if (silenceTimerRef.current) window.clearTimeout(silenceTimerRef.current)
+    setPartialTranscript('')
     const recognition = new SpeechRecognitionAPI()
-    recognition.continuous = false
-    recognition.interimResults = false
-    recognition.lang = 'en-US'
+    recognition.continuous = true
+    recognition.interimResults = true
+    recognition.lang = language
     recognition.onstart = () => setMode('listening')
     recognition.onresult = (event) => {
-      const text = event.results[0][0].transcript
-      void sendMessage(text)
-      setMode('speaking')
+      let interim = ''
+      let finalText = ''
+      const resultIndex = (event as unknown as { resultIndex: number }).resultIndex
+      const results = event.results as unknown as Array<{ 0: { transcript: string }; isFinal: boolean }>
+      for (let index = resultIndex; index < results.length; index += 1) {
+        const transcript = results[index][0].transcript
+        if (results[index].isFinal) finalText += transcript
+        else interim += transcript
+      }
+      const liveText = interim || finalText
+      setPartialTranscript(liveText)
+      if (liveText.trim()) {
+        if (silenceTimerRef.current) window.clearTimeout(silenceTimerRef.current)
+        silenceTimerRef.current = window.setTimeout(() => {
+          recognition.stop()
+          if (liveText.trim()) {
+            setPartialTranscript('')
+            setMode('thinking')
+            void sendMessage(liveText)
+          }
+        }, 1800)
+      }
+      if (finalText.trim()) {
+        if (silenceTimerRef.current) window.clearTimeout(silenceTimerRef.current)
+        recognition.stop()
+        setPartialTranscript('')
+        setMode('thinking')
+        void sendMessage(finalText)
+      }
     }
-    recognition.onerror = () => setMode('idle')
-    recognition.onend = () => setMode((current) => current === 'listening' ? 'idle' : current)
+    recognition.onerror = (event?: Event) => {
+      if (silenceTimerRef.current) window.clearTimeout(silenceTimerRef.current)
+      setMode('idle')
+      const code = (event as Event & { error?: string } | undefined)?.error
+      setVoiceError(code === 'not-allowed' || code === 'service-not-allowed'
+        ? 'Microphone permission was denied. Allow microphone access in your browser settings, or use the text box below.'
+        : code === 'audio-capture'
+          ? 'No microphone was detected. Connect a microphone or use the text box below.'
+          : 'Voice input stopped unexpectedly. Try again or use the text box below.')
+    }
+    recognition.onend = () => {
+      if (silenceTimerRef.current) window.clearTimeout(silenceTimerRef.current)
+      setMode((current) => current === 'listening' ? 'idle' : current)
+    }
     recognitionRef.current = recognition
-    recognition.start()
+    try { recognition.start() } catch { setVoiceError('Microphone is already starting. Please try again.'); setMode('idle') }
   }
 
   function timestamp() {
@@ -164,6 +228,14 @@ export function VoiceAgentConsole() {
         <div className="flex items-center gap-2 text-xs text-muted-foreground"><span className={`size-2 rounded-full ${connected ? 'bg-emerald-500' : 'bg-destructive'}`} /> {connected ? 'Realtime connected' : 'Disconnected'}<button className="ml-3 rounded-md border border-border p-2 hover:bg-muted" aria-label="Settings"><Settings2 className="size-4" /></button></div>
       </header>
 
+      <div className="mx-auto max-w-[1440px] px-5 pt-5 lg:px-8 lg:pt-8">
+        <a href="tel:18001234567" className="group relative flex overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/[0.09] via-card to-accent p-4 shadow-sm transition hover:border-primary/40 hover:shadow-md" aria-label="Call the 24/7 Arogya Assist helpline at 1800 123 4567">
+          <div className="absolute inset-y-0 right-0 w-1/3 bg-gradient-to-l from-primary/10 to-transparent" aria-hidden="true" />
+          <div className="relative flex min-w-0 items-center gap-3"><div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm"><PhoneCall className="size-5" /></div><div className="min-w-0"><p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">24/7 outside-call access</p><p className="mt-0.5 truncate text-sm font-semibold text-foreground sm:text-base">1800-123-4567</p><p className="text-xs text-muted-foreground">Registration, doctors, tests, and reception timings</p></div></div>
+          <div className="relative ml-auto hidden items-center gap-2 self-center rounded-full border border-primary/20 bg-background/70 px-3 py-1.5 text-xs font-medium text-primary sm:flex">Call now <PhoneCall className="size-3.5 transition-transform group-hover:translate-x-0.5" /></div>
+        </a>
+      </div>
+
       <div className="mx-auto grid max-w-[1440px] gap-6 p-5 lg:grid-cols-[240px_minmax(0,1fr)_300px] lg:p-8">
         <aside className="nova-sidebar hidden rounded-3xl border border-white/70 p-4 lg:block">
           <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">Workspace</p>
@@ -176,8 +248,8 @@ export function VoiceAgentConsole() {
         </aside>
 
         <section className="min-w-0">
-          <div className="mb-5 flex items-end justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">Patient desk / 001</p><h1 className="nova-title mt-1 text-3xl font-semibold tracking-tight lg:text-4xl">Talk to Arogya Assist</h1><p className="mt-1 max-w-xl text-sm text-muted-foreground">Get clear, focused answers for a specific day and time, or ask for the complete Monday–Sunday routine.</p></div><button className="flex items-center gap-1 rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:bg-muted"><span className="size-1.5 rounded-full bg-emerald-500" /> English <ChevronDown className="size-3" /></button></div>
-          <div className="nova-tabs mb-4 flex gap-1 rounded-2xl border border-white/70 bg-white/60 p-1.5 shadow-sm" role="tablist" aria-label="Patient desk tabs"><button role="tab" aria-selected={activeTab === 'desk'} onClick={() => setActiveTab('desk')} className={`rounded-lg px-3 py-2 text-xs font-medium ${activeTab === 'desk' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>Patient desk</button><button role="tab" aria-selected={activeTab === 'reports'} onClick={() => setActiveTab('reports')} className={`rounded-lg px-3 py-2 text-xs font-medium ${activeTab === 'reports' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>Test report status</button></div>
+          <div className="mb-5 flex items-end justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">Patient desk / 001</p><h1 className="nova-title mt-1 text-3xl font-semibold tracking-tight lg:text-4xl">Talk to Arogya Assist</h1><p className="mt-1 max-w-xl text-sm text-muted-foreground">Get clear, focused answers for a specific day and time, or ask for the complete Monday–Sunday routine.</p></div><label className="flex items-center gap-1 rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:bg-muted"><span className="size-1.5 rounded-full bg-emerald-500" /><span className="sr-only">Speech language</span><select value={language} onChange={(event) => setLanguage(event.target.value)} className="bg-transparent outline-none"><option value="en-US">English</option><option value="hi-IN">हिन्दी</option><option value="bn-IN">বাংলা</option><option value="ta-IN">தமிழ்</option></select><ChevronDown className="size-3" /></label></div>
+          <div className="nova-tabs mb-4 grid grid-cols-2 gap-1 rounded-2xl border border-white/70 bg-white/60 p-1.5 shadow-sm" role="tablist" aria-label="Patient desk tabs"><button role="tab" aria-selected={activeTab === 'desk'} onClick={() => setActiveTab('desk')} className={`rounded-lg px-3 py-2 text-xs font-medium ${activeTab === 'desk' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>Patient desk</button><button role="tab" aria-selected={activeTab === 'reports'} onClick={() => setActiveTab('reports')} className={`rounded-lg px-3 py-2 text-xs font-medium ${activeTab === 'reports' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>Test report status</button></div>
           <div className="mb-5 flex flex-wrap gap-2" aria-label="Schedule services"><button onClick={() => askService('registration', 'What are the registration hours from Monday through Sunday?')} aria-pressed={activeService === 'registration'} className={`nova-service-pill rounded-full border px-3 py-2 text-xs transition-all ${activeService === 'registration' ? 'nova-service-active border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-muted-foreground hover:border-primary hover:text-foreground'}`}>Registration hours</button><button onClick={() => askService('doctors', 'Which doctors and departments are available from Monday through Sunday, with their morning, afternoon, and evening timings?')} aria-pressed={activeService === 'doctors'} className={`nova-service-pill rounded-full border px-3 py-2 text-xs transition-all ${activeService === 'doctors' ? 'nova-service-active border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-muted-foreground hover:border-primary hover:text-foreground'}`}>Doctor availability</button><button onClick={() => askService('testing', 'What medical tests are available from Monday through Sunday, with morning, afternoon, and evening timings?')} aria-pressed={activeService === 'testing'} className={`nova-service-pill rounded-full border px-3 py-2 text-xs transition-all ${activeService === 'testing' ? 'nova-service-active border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-muted-foreground hover:border-primary hover:text-foreground'}`}>Medical testing</button><button onClick={() => askService('reception', 'What are the reception hours from Monday through Sunday?')} aria-pressed={activeService === 'reception'} className={`nova-service-pill rounded-full border px-3 py-2 text-xs transition-all ${activeService === 'reception' ? 'nova-service-active border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-muted-foreground hover:border-primary hover:text-foreground'}`}>Reception timing</button></div>
           {activeTab === 'reports' && <ReportLookup onAsk={(message) => void sendMessage(message)} />}
           <ScheduleDirectory focusDay={scheduleFocus.day} pulseKey={scheduleFocus.pulse} />
@@ -187,9 +259,9 @@ export function VoiceAgentConsole() {
                 {mode !== 'idle' && <div className="absolute inset-0 animate-ping rounded-full border border-primary/30" />}
                 <VoiceAgentScene />
               </div>
-              <p className="mt-7 font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">{mode === 'listening' ? 'Listening to your question' : mode === 'speaking' ? 'Arogya Assist is speaking' : 'Tap to ask Arogya Assist'}</p>
-              <p className="mt-2 text-sm text-muted-foreground">{minutes}:{seconds} · low-latency audio channel</p>
-              <div className="mt-7 flex h-8 items-center gap-1" aria-label="Audio waveform">{Array.from({ length: 28 }).map((_, index) => <span key={index} style={{ animationDelay: `${index * 45}ms` }} className={`nova-wave-bar w-1 rounded-full bg-primary/70 transition-all ${mode === 'idle' ? 'h-1' : index % 3 === 0 ? 'h-7' : index % 2 === 0 ? 'h-4' : 'h-2'}`} />)}</div>
+              <p className="mt-7 font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">{mode === 'listening' ? 'Listening to your question' : mode === 'thinking' ? 'Thinking through your request' : mode === 'speaking' ? 'Arogya Assist is speaking · tap to interrupt' : 'Tap to ask Arogya Assist'}</p>{partialTranscript && <p className="mt-2 max-w-md text-center text-sm text-foreground/80" aria-live="polite">“{partialTranscript}”</p>}{(voiceError || error) && <p role="alert" className="mt-3 max-w-md text-center text-xs text-destructive">{voiceError || error}</p>}
+              <p className="mt-2 text-sm text-muted-foreground">{minutes}:{seconds} · {!speechCapabilitiesReady ? 'checking voice support' : speechSupported && speechOutputSupported ? 'voice ready' : 'text fallback ready'}</p>
+              <div className="mt-7 flex h-8 items-center gap-1" aria-label="Audio waveform">{Array.from({ length: 28 }).map((_, index) => <span key={index} style={{ animationDelay: `${index * 45}ms` }} className={`nova-wave-bar w-1 rounded-full bg-primary/70 transition-all ${mode === 'idle' ? 'h-1' : mode === 'thinking' ? (index % 2 ? 'h-3' : 'h-5') : index % 3 === 0 ? 'h-7' : index % 2 === 0 ? 'h-4' : 'h-2'}`} />)}</div>
             </div>
             <div className="flex items-center justify-center gap-3 border-t border-border bg-muted/20 p-4"><button onClick={() => { if (!muted) window.speechSynthesis?.cancel(); setMuted(!muted) }} className="rounded-full border border-border p-3 hover:bg-muted" aria-label={muted ? 'Unmute microphone' : 'Mute microphone'}>{muted ? <MicOff className="size-4" /> : <Mic className="size-4" />}</button><button onClick={toggleVoice} className={`flex size-14 items-center justify-center rounded-full ${mode === 'idle' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'bg-destructive text-destructive-foreground'} shadow-sm`} aria-label={mode === 'idle' ? 'Start voice session' : 'Stop voice session'}>{mode === 'idle' ? <Mic className="size-5" /> : <CircleStop className="size-5" />}</button><button className="rounded-full border border-border p-3 hover:bg-muted" aria-label="Audio output"><Volume2 className="size-4" /></button></div>
           </div>
@@ -198,7 +270,7 @@ export function VoiceAgentConsole() {
           <div className="mt-6 rounded-2xl border border-border bg-card"><div className="flex items-center justify-between border-b border-border px-4 py-3"><div className="flex items-center gap-2 text-sm font-medium"><AudioLines className="size-4 text-primary" /> Live transcript</div><button onClick={clearMessages} className="text-xs text-muted-foreground hover:text-foreground">Clear</button></div><div className="max-h-60 space-y-4 overflow-auto p-4">{messages.map((message, index) => <div key={`${message.time}-${index}`} className="flex gap-3"><div className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md ${message.role === 'assistant' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>{message.role === 'assistant' ? <Bot className="size-3.5" /> : message.role === 'user' ? <UserRound className="size-3.5" /> : <Activity className="size-3.5" />}</div><div className="min-w-0"><div className="flex items-center gap-2"><span className="text-xs font-medium capitalize">{message.role}</span><span className="font-mono text-[10px] text-muted-foreground">{message.time}</span></div><p className="mt-1 text-sm leading-6 text-muted-foreground">{message.text}</p></div></div>)}</div><div className="flex items-center gap-2 border-t border-border p-3"><button className="rounded-md p-2 text-muted-foreground hover:bg-muted" aria-label="Attach image"><Paperclip className="size-4" /></button><input value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing && event.keyCode !== 229) submitDraft() }} placeholder="Ask about registration, doctors, testing, or reception…" className="min-w-0 flex-1 bg-transparent px-1 text-sm outline-none placeholder:text-muted-foreground" /><button onClick={submitDraft} disabled={isLoading} className="rounded-md bg-primary p-2 text-primary-foreground hover:bg-primary/90 disabled:cursor-wait disabled:opacity-50" aria-label="Send message"><Send className="size-4" /></button></div></div>
         </section>
 
-        <aside className="space-y-5"><div className="rounded-2xl border border-border bg-card p-4"><div className="flex items-center justify-between"><p className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Agent profile</p><button onClick={() => setShowTools(!showTools)} aria-label="More agent options"><MoreHorizontal className="size-4 text-muted-foreground" /></button></div><div className="mt-5 flex items-center gap-3"><div className="flex size-11 items-center justify-center rounded-xl bg-primary text-primary-foreground"><Sparkles className="size-5" /></div><div><p className="font-medium">Arogya Assist</p><p className="text-xs text-muted-foreground">Hospital information · v1.0</p></div></div>{showTools && <div className="mt-4 rounded-lg bg-muted p-3 text-xs text-muted-foreground">Tool routing is enabled for vision, web context, and session memory.</div>}<div className="mt-5 flex flex-wrap gap-2"><span className="rounded-full border border-border px-2.5 py-1 text-[11px] text-muted-foreground">Voice + text</span><span className="rounded-full border border-border px-2.5 py-1 text-[11px] text-muted-foreground">Vision ready</span><span className="rounded-full border border-border px-2.5 py-1 text-[11px] text-muted-foreground">Tool use</span></div></div><div className="rounded-2xl border border-primary/20 bg-primary/5 p-4"><div className="flex items-center gap-2 text-sm font-medium"><Check className="size-4 text-primary" /> Patient-safe workflow</div><p className="mt-2 text-xs leading-5 text-muted-foreground">General hospital information is available instantly. Personal appointment, surgery, or report status requires patient ID verification.</p><div className="mt-3 flex items-center gap-2 text-xs text-primary"><Headphones className="size-3.5" /> Human transfer always available</div></div><div className="rho-helpline-card rounded-2xl border border-border p-4"><div className="rho-helpline-orbit" aria-hidden="true"><span>RHO</span></div><p className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">RHO Assist · toll-free information line</p><a href="tel:18001234567" className="rho-helpline-number mt-2 block text-2xl font-semibold tracking-tight text-primary hover:underline">1800-123-4567</a><p className="mt-1 text-xs leading-5 text-muted-foreground">Call for doctor availability, registration, medical testing, and reception hours from Monday to Sunday.</p><span className="mt-3 inline-flex rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary">Voice support · 24/7 information access</span></div><div className="rounded-2xl border border-border bg-card p-4"><div className="flex items-center justify-between"><p className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Session health</p><span className="flex items-center gap-1 text-xs text-emerald-600"><span className="size-1.5 rounded-full bg-emerald-500" /> healthy</span></div><div className="mt-5 space-y-4"><Metric label="Audio input" value="48 kHz" /><Metric label="Turn latency" value="0.42 s" /><Metric label="Context window" value="8.2k / 32k" /></div></div><div className="rounded-2xl border border-border bg-primary p-4 text-primary-foreground"><div className="flex items-center gap-2 text-sm font-medium"><Headphones className="size-4" /> Pro tip</div><p className="mt-2 text-xs leading-5 text-primary-foreground/70">Start speaking naturally. Nova detects pauses and takes turns automatically.</p></div></aside>
+        <aside className="grid gap-5 sm:grid-cols-2 lg:flex lg:flex-col"><div className="rounded-2xl border border-border bg-card p-4"><div className="flex items-center justify-between"><p className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Agent profile</p><button onClick={() => setShowTools(!showTools)} aria-label="More agent options"><MoreHorizontal className="size-4 text-muted-foreground" /></button></div><div className="mt-5 flex items-center gap-3"><div className="flex size-11 items-center justify-center rounded-xl bg-primary text-primary-foreground"><Sparkles className="size-5" /></div><div><p className="font-medium">Arogya Assist</p><p className="text-xs text-muted-foreground">Hospital information · v1.0</p></div></div>{showTools && <div className="mt-4 rounded-lg bg-muted p-3 text-xs text-muted-foreground">Tool routing is enabled for vision, web context, and session memory.</div>}<div className="mt-5 flex flex-wrap gap-2"><span className="rounded-full border border-border px-2.5 py-1 text-[11px] text-muted-foreground">Voice + text</span><span className="rounded-full border border-border px-2.5 py-1 text-[11px] text-muted-foreground">Vision ready</span><span className="rounded-full border border-border px-2.5 py-1 text-[11px] text-muted-foreground">Tool use</span></div></div><div className="rounded-2xl border border-primary/20 bg-primary/5 p-4"><div className="flex items-center gap-2 text-sm font-medium"><Check className="size-4 text-primary" /> Patient-safe workflow</div><p className="mt-2 text-xs leading-5 text-muted-foreground">General hospital information is available instantly. Personal appointment, surgery, or report status requires patient ID verification.</p><div className="mt-3 flex items-center gap-2 text-xs text-primary"><Headphones className="size-3.5" /> Human transfer always available</div></div><div className="rho-helpline-card rounded-2xl border border-border p-4"><div className="rho-helpline-orbit" aria-hidden="true"><span>RHO</span></div><p className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">RHO Assist · toll-free information line</p><a href="tel:18001234567" className="rho-helpline-number mt-2 block text-2xl font-semibold tracking-tight text-primary hover:underline">1800-123-4567</a><p className="mt-1 text-xs leading-5 text-muted-foreground">Call for doctor availability, registration, medical testing, and reception hours from Monday to Sunday.</p><span className="mt-3 inline-flex rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary">Voice support · 24/7 information access</span></div><div className="rounded-2xl border border-border bg-card p-4"><div className="flex items-center justify-between"><p className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Session health</p><span className="flex items-center gap-1 text-xs text-emerald-600"><span className="size-1.5 rounded-full bg-emerald-500" /> healthy</span></div><div className="mt-5 space-y-4"><Metric label="Audio input" value="48 kHz" /><Metric label="Turn latency" value="0.42 s" /><Metric label="Context window" value="8.2k / 32k" /></div></div><div className="rounded-2xl border border-border bg-primary p-4 text-primary-foreground"><div className="flex items-center gap-2 text-sm font-medium"><Headphones className="size-4" /> Pro tip</div><p className="mt-2 text-xs leading-5 text-primary-foreground/70">Start speaking naturally. Nova detects pauses and takes turns automatically.</p></div></aside>
       </div>
       <footer className="mx-auto flex max-w-[1440px] items-center justify-between px-5 pb-6 text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground lg:px-8"><span>Secure session · encrypted transport</span><span className="hidden sm:block">Neon persistence layer · LiveKit transport</span></footer>
     </main>
