@@ -27,11 +27,14 @@ async function isValidTwilioRequest(request: Request, params: URLSearchParams) {
   if (!token || !signature) return process.env.NODE_ENV !== 'production'
 
   const url = new URL(request.url)
-  const data = [...params.entries()].sort(([a], [b]) => a.localeCompare(b)).reduce((value, [key, item]) => value + key + item, url.toString())
+  // Twilio signs the exact request URL followed by parameters in the order
+  // received. Sorting the fields produces a different signature and causes
+  // legitimate production calls to be rejected.
+  const data = [...params.entries()].reduce((value, [key, item]) => value + key + item, url.toString())
   const crypto = await import('node:crypto')
   const expected = crypto.createHmac('sha1', token).update(data).digest('base64')
-  const received = Buffer.from(signature)
-  const calculated = Buffer.from(expected)
+  const received = Buffer.from(signature, 'utf8')
+  const calculated = Buffer.from(expected, 'utf8')
   return received.length === calculated.length && crypto.timingSafeEqual(received, calculated)
 }
 
