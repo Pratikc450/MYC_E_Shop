@@ -13,6 +13,8 @@ function twiml(body: string) {
   })
 }
 
+const TOLL_FREE_NUMBER = '1800-123-4567'
+
 function gather(prompt: string) {
   return `<Gather input="speech" action="/api/twilio/voice" method="POST" speechTimeout="auto" language="en-IN" actionOnEmptyResult="true"><Say language="en-IN" voice="Polly.Aditi">${xml(prompt)}</Say></Gather>`
 }
@@ -40,7 +42,7 @@ async function answerFor(message: string) {
   try {
     const result = await generateText({
       model: 'openai/gpt-4o-mini',
-      system: 'You are Arogya Assist, a hospital information phone agent. Give one or two short, clear sentences. Help with registration, reception, doctors, appointments, and medical testing schedules. Never diagnose, give dosage, disclose private records, or invent live availability. Ask one focused clarification when needed.',
+      system: `You are Arogya Assist, the 24/7 inbound phone agent for the diagnostic center at ${TOLL_FREE_NUMBER}. Callers may be patients, family members, or members of the public calling from outside the hospital. Give one or two short, clear sentences using only the directory schedule for registration, reception, doctors, appointments, and medical testing across Monday through Sunday and morning, afternoon, and evening. Never diagnose, give dosage, disclose private records, or invent live availability. Ask one focused clarification when needed. For emergencies, direct the caller to local emergency services.`,
       prompt: message,
       maxOutputTokens: 120,
     })
@@ -56,7 +58,7 @@ export async function POST(request: Request) {
 
   const speech = params.get('SpeechResult')?.trim()
   if (!speech) {
-    return twiml(`${gather('Welcome to Arogya Assist. I am available twenty-four hours a day, every day, for hospital information. Please ask about doctor timings, registration, reception, or medical tests.')}`)
+    return twiml(`${gather(`Welcome to Arogya Assist on ${TOLL_FREE_NUMBER}. I am available twenty-four hours a day, every day, for hospital information. Please ask about doctor availability, registration hours, reception timing, or medical testing for any day from Monday through Sunday, in the morning, afternoon, or evening.`)}`)
   }
 
   const answer = await answerFor(speech)
@@ -65,7 +67,7 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
-  return twiml(gather('Welcome to Arogya Assist. Please ask your healthcare information question.'))
+  return twiml(gather(`Welcome to Arogya Assist on ${TOLL_FREE_NUMBER}. Please ask about doctor availability, registration, reception, or medical testing schedules.`))
 }
 
 export async function HEAD() {
