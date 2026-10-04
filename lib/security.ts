@@ -6,7 +6,14 @@ const MAX_HISTORY_ITEMS = 12
 const MAX_HISTORY_CONTENT_LENGTH = 1_000
 const WINDOW_MS = 60_000
 const MAX_REQUESTS_PER_WINDOW = 30
+const AI_TIMEOUT_MS = 8_000
 const requestBuckets = new Map<string, { count: number; resetAt: number }>()
+
+export function withTimeout<T>(operation: (signal: AbortSignal) => Promise<T>, timeoutMs = AI_TIMEOUT_MS) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+  return operation(controller.signal).finally(() => clearTimeout(timeout))
+}
 
 export function requestId() {
   return randomUUID()
@@ -69,6 +76,7 @@ export function sanitizeHistory(value: unknown): Array<{ role: 'user' | 'assista
 export function securityHeaders(response: Response, id: string) {
   response.headers.set('Cache-Control', 'no-store')
   response.headers.set('X-Request-ID', id)
+  response.headers.set('Vary', 'Origin, Accept-Encoding')
   response.headers.set('X-Content-Type-Options', 'nosniff')
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
   response.headers.set('Permissions-Policy', 'camera=(), geolocation=(), payment=()')

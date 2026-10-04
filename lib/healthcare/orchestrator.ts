@@ -31,6 +31,16 @@ function requestedDay(text: string) {
   return requestedDays(text)?.[0]
 }
 
+function requestsWholeWeek(text: string) {
+  return /\b(?:whole\s*week|entire\s*week|all\s*week|weekly|seven\s*day(?:s)?|every\s*day)\b/i.test(text)
+}
+
+function scheduleScope(text: string) {
+  const days = requestedDays(text)
+  if (days?.length) return days
+  return requestsWholeWeek(text) ? undefined : null
+}
+
 const departmentAliases: Record<string, string[]> = {
   Cardiology: ['cardiology', 'cardiologist', 'cardiac', 'heart'],
   Orthopedics: ['orthopedic', 'orthopaedic', 'orthopedics', 'bone'],
@@ -65,6 +75,12 @@ function formatWeeklyHours(label: string, schedule: RegistrationHours[], day?: t
     return `${label}, ${scope}, ${hour.label}: ${matches.length ? matches.join('. ') : 'not available at that exact time'}.`
   }
   return `${label}, ${scope}: ${rows.map((row) => `${row.day}: ${shift ? `${shift} ${formatClockRange(row[shift])}` : `morning ${formatClockRange(row.morning)}; afternoon ${formatClockRange(row.afternoon)}; evening ${formatClockRange(row.evening)}`}`).join('. ')}.`
+}
+
+function formatForRequestedDays<T extends WeeklyHours>(label: string, schedule: T[], days: typeof WEEKDAYS[number][] | undefined, shift: ReturnType<typeof requestedShift>, hour: ReturnType<typeof requestedHour>) {
+  if (!days || days.length <= 1) return null
+  const rows = days.map((day) => formatWeeklyHours(label, schedule, day, shift, hour))
+  return rows.join(' ')
 }
 
 function requestedShift(text: string) {
@@ -152,7 +168,8 @@ export function reportStatusResponse(text: string, conversationHistory: Array<{ 
 }
 
 export function clinicScheduleResponse(text: string): string | null {
-  const day = requestedDay(text)
+  const days = scheduleScope(text)
+  const day = days?.[0]
   const shift = requestedShift(text)
   const hour = requestedHour(text)
   const asksRegistration = /registration/i.test(text)
@@ -160,26 +177,27 @@ export function clinicScheduleResponse(text: string): string | null {
   const asksDoctor = /doctor|dr\.?\s+[a-z]|specialist|physician|availab(?:le|ility)/i.test(text)
   const asksTesting = /test|diagnostic|heart|cardiac|orthopedic|orthopaedic|bone|lung|lungs|pulmonary/i.test(text)
 
+  if (days === null && (asksRegistration || asksReception || asksDoctor || asksTesting)) {
+    return 'Which day would you like me to check? You can ask for Monday through Sunday, a time such as morning or afternoon, or the whole week.'
+  }
+
   if (asksRegistration && (asksDoctor || asksTesting || asksReception)) {
-    const registration = formatWeeklyHours('Registration hours', REGISTRATION_HOURS, day, shift, hour)
+    const registration = formatForRequestedDays('Registration hours', REGISTRATION_HOURS, days ?? undefined, shift, hour) ?? formatWeeklyHours('Registration hours', REGISTRATION_HOURS, day, shift, hour)
     const additional = clinicScheduleResponse(text.replace(/registration/gi, ''))
     return additional ? `${registration} ${additional}` : registration
   }
-  if (asksRegistration) {
-    return formatWeeklyHours('Registration hours', REGISTRATION_HOURS, day, shift, hour)
-  }
-  if (asksReception) {
-    return formatWeeklyHours('Reception hours', REGISTRATION_HOURS, day, shift, hour)
-  }
-  if (/test|diagnostic|heart|cardiac|orthopedic|orthopaedic|bone|lung|lungs|pulmonary/i.test(text)) {
-    const scope = day ? `${day}` : 'Monday through Sunday'
+  if (asksRegistration) return formatForRequestedDays('Registration hours', REGISTRATION_HOURS, days ?? undefined, shift, hour) ?? formatWeeklyHours('Registration hours', REGISTRATION_HOURS, day, shift, hour)
+  if (asksReception) return formatForRequestedDays('Reception hours', REGISTRATION_HOURS, days ?? undefined, shift, hour) ?? formatWeeklyHours('Reception hours', REGISTRATION_HOURS, day, shift, hour)
+
+  if (asksTesting) {
+    const scope = day ? `${day}${days && days.length > 1 ? ' through ' + days[days.length - 1] : ''}` : 'Monday through Sunday'
     const matches = requestedTests(text)
     const tests = matches.length > 0 ? matches : TEST_SCHEDULES
     const focus = matches.length > 0 ? ` for ${matches.map((test) => test.category).join(' and ')}` : ''
     return `Medical testing schedule${focus} for ${scope}: ${tests.map((test) => `${test.testName} at ${test.location}: ${formatDetailedSchedule(test.weeklySlots, day, shift, hour)}`).join(' Next test: ')}`
   }
-  if (/doctor|dr\.?\s+[a-z]|specialist|physician|availab(?:le|ility)/i.test(text)) {
-    const scope = day ? `${day}` : 'Monday through Sunday'
+  if (asksDoctor) {
+    const scope = day ? `${day}${days && days.length > 1 ? ' through ' + days[days.length - 1] : ''}` : 'Monday through Sunday'
     const matches = requestedDoctors(text)
     const doctors = matches.length > 0 ? matches : DOCTOR_SCHEDULES
     const focus = matches.length > 0 ? ` for ${matches.map((doctor) => doctor.doctorName).join(' and ')}` : ''

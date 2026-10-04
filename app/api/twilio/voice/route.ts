@@ -1,6 +1,6 @@
 import { generateText } from 'ai'
 import { clinicScheduleResponse, detectEmergency, emergencyResponse, lowConfidenceResponse } from '@/lib/healthcare/orchestrator'
-import { getClientKey, isPayloadTooLarge, isRateLimited, requestId, securityHeaders } from '@/lib/security'
+import { getClientKey, isPayloadTooLarge, isRateLimited, requestId, securityHeaders, withTimeout } from '@/lib/security'
 
 export const runtime = 'nodejs'
 
@@ -10,7 +10,10 @@ function xml(value: string) {
 
 function twiml(body: string, id = requestId()) {
   const response = new Response(`<?xml version="1.0" encoding="UTF-8"?><Response>${body}</Response>`, {
-    headers: { 'Content-Type': 'text/xml; charset=utf-8' },
+    headers: {
+      'Content-Type': 'text/xml; charset=utf-8',
+      'Cache-Control': 'no-store',
+    },
   })
   return securityHeaders(response, id)
 }
@@ -45,12 +48,13 @@ async function answerFor(message: string) {
   if (message.trim().length < 8) return lowConfidenceResponse()
 
   try {
-    const result = await generateText({
+    const result = await withTimeout((signal) => generateText({
       model: 'openai/gpt-4o-mini',
+      abortSignal: signal,
       system: `You are Arogya Assist, the 24/7 inbound phone agent for the diagnostic center at ${TOLL_FREE_NUMBER}. Callers may be patients, family members, or members of the public calling from outside the hospital. Give one or two short, clear sentences using only the directory schedule for registration, reception, doctors, appointments, and medical testing across Monday through Sunday and morning, afternoon, and evening. Never diagnose, give dosage, disclose private records, or invent live availability. Ask one focused clarification when needed. For emergencies, direct the caller to local emergency services.`,
       prompt: message,
       maxOutputTokens: 120,
-    })
+    }))
     return result.text
   } catch {
     return 'I can help with doctor schedules, registration, reception, and medical testing. Please say which service and day you need.'

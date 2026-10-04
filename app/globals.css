@@ -211,6 +211,12 @@
 }
 
 .schedule-live-dot { animation: schedule-live 2.4s ease-in-out infinite; }
+
+.nova-shell { background-image: radial-gradient(circle at 7% 0%, oklch(0.91 0.06 220 / 0.32), transparent 25rem), radial-gradient(circle at 94% 20%, oklch(0.92 0.07 285 / 0.24), transparent 28rem); }
+.nova-header { backdrop-filter: blur(18px); background: oklch(0.99 0.004 250 / 0.78); position: sticky; top: 0; z-index: 20; }
+.nova-panel, .nova-sidebar { background: oklch(1 0 0 / 0.76); box-shadow: 0 1.5rem 4rem oklch(0.3 0.04 250 / 0.06); backdrop-filter: blur(16px); }
+.nova-service-pill:focus-visible, .nova-tabs button:focus-visible, .nova-sidebar button:focus-visible { outline: 3px solid oklch(0.7 0.15 220 / 0.4); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .nova-shell *, .nova-shell *::before, .nova-shell *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: 0.001ms !important; } }
 .schedule-track { position: relative; height: 1.15rem; overflow: hidden; border-radius: 0.45rem; background: oklch(0.94 0.015 250); padding: 0.18rem; perspective: 500px; }
 .schedule-track::after { content: ''; position: absolute; inset: 0 auto 0 0; width: 28%; pointer-events: none; background: linear-gradient(90deg, transparent, oklch(1 0 0 / 0.7), transparent); animation: schedule-scan 4.5s ease-in-out infinite; }
 .schedule-segment { position: relative; z-index: 1; display: block; height: 100%; flex: 1; border-radius: 0.28rem; transform: skewX(-14deg) translateZ(0); transition: flex 400ms ease, filter 300ms ease; }
