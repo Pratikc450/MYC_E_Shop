@@ -1,6 +1,6 @@
 import { generateText } from 'ai'
 import { clinicScheduleResponse, classifyIntent, confidenceFor, detectEmergency, emergencyResponse, lowConfidenceResponse, reportStatusResponse } from '@/lib/healthcare/orchestrator'
-import { getClientKey, isPayloadTooLarge, isRateLimited, isTrustedOrigin, jsonError, jsonOk, requestId, sanitizeHistory, sanitizeMessage } from '@/lib/security'
+import { getClientKey, isPayloadTooLarge, isRateLimited, isTrustedOrigin, jsonError, jsonOk, requestId, sanitizeHistory, sanitizeMessage, withTimeout } from '@/lib/security'
 
 export const runtime = 'nodejs'
 
@@ -69,13 +69,14 @@ export async function POST(request: Request) {
     let text: string
 
     try {
-      const result = await generateText({
+      const result = await withTimeout((signal) => generateText({
         model: 'openai/gpt-4o-mini',
+        abortSignal: signal,
         messages,
         system: `You are Arogya Assist, a warm, professional hospital information assistant. Help patients with registration hours, reception, doctor availability, appointments, surgery scheduling, medical testing status, and pharmacy stock. Speak in one or two short sentences suitable for voice. Never provide diagnosis, dosage, report contents, or invented live availability. If a request needs patient-specific data, explain that identity verification is required. If a request is unclear, ask one focused clarification question.`,
         temperature: 0.65,
         maxOutputTokens: 120,
-      })
+      }))
       text = result.text
     } catch (modelError) {
       // Keep the voice loop usable in previews when the Gateway account is not unlocked yet.
