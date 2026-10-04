@@ -76,6 +76,7 @@ export function sanitizeHistory(value: unknown): Array<{ role: 'user' | 'assista
 export function securityHeaders(response: Response, id: string) {
   response.headers.set('Cache-Control', 'no-store')
   response.headers.set('X-Request-ID', id)
+  response.headers.set('Vary', 'Origin, Accept-Encoding')
   response.headers.set('X-Content-Type-Options', 'nosniff')
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
   response.headers.set('Permissions-Policy', 'camera=(), geolocation=(), payment=()')

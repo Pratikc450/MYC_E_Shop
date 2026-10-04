@@ -10,7 +10,10 @@ function xml(value: string) {
 
 function twiml(body: string, id = requestId()) {
   const response = new Response(`<?xml version="1.0" encoding="UTF-8"?><Response>${body}</Response>`, {
-    headers: { 'Content-Type': 'text/xml; charset=utf-8' },
+    headers: {
+      'Content-Type': 'text/xml; charset=utf-8',
+      'Cache-Control': 'no-store',
+    },
   })
   return securityHeaders(response, id)
 }

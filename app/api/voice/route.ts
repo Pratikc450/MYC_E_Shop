@@ -8,6 +8,7 @@ export async function POST(request: Request) {
   const id = requestId()
   try {
     if (request.method !== 'POST' || !isTrustedOrigin(request)) return jsonError('Request not allowed', 403, id)
+    if (!request.headers.get('content-type')?.toLowerCase().includes('application/json')) return jsonError('Content-Type must be application/json', 415, id)
     if (isPayloadTooLarge(request)) return jsonError('Request payload is too large', 413, id)
     if (isRateLimited(`voice:${getClientKey(request)}`)) return jsonError('Too many requests. Please try again shortly.', 429, id)
 
