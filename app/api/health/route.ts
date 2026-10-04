@@ -1,3 +1,4 @@
+import { getHospitalSystemHealth } from '@/lib/healthcare/hospital-system-adapter'
 import { securityHeaders, requestId } from '@/lib/security'
 
 export const runtime = 'nodejs'
@@ -12,6 +13,7 @@ export function GET() {
       aiGateway: Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN),
       twilio: Boolean(process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_PHONE_NUMBER),
       database: Boolean(process.env.DATABASE_URL),
+      hospitalSystem: getHospitalSystemHealth(),
     },
   }, { headers: { 'Cache-Control': 'no-store' } })
   return securityHeaders(response, id)
