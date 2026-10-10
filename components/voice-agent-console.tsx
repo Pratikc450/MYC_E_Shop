@@ -49,6 +49,7 @@ export function VoiceAgentConsole() {
   const [scheduleFocus, setScheduleFocus] = useState<{ day?: string; pulse: number }>({ pulse: 0 })
   const [speechCapabilities, setSpeechCapabilities] = useState({ input: false, output: false })
   const [speechCapabilitiesReady, setSpeechCapabilitiesReady] = useState(false)
+  const [sandboxStatus, setSandboxStatus] = useState<{ environment: string; version: string; checkedAt: string; services: Array<{ name: string; status: 'ready' | 'degraded' | 'offline'; detail: string }> } | null>(null)
   const recognitionRef = useRef<SpeechRecognition | null>(null)
   const speechRef = useRef<SpeechSynthesisUtterance | null>(null)
   const messageCountRef = useRef(messages.length)
@@ -63,6 +64,21 @@ export function VoiceAgentConsole() {
       output: 'speechSynthesis' in window,
     })
     setSpeechCapabilitiesReady(true)
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    const checkSandbox = async () => {
+      try {
+        const response = await fetch('/api/sandbox/status', { cache: 'no-store' })
+        if (active && response.ok) setSandboxStatus(await response.json())
+      } catch {
+        if (active) setSandboxStatus(null)
+      }
+    }
+    void checkSandbox()
+    const sandboxTimer = window.setInterval(checkSandbox, 5_000)
+    return () => { active = false; window.clearInterval(sandboxTimer) }
   }, [])
 
   useEffect(() => {
@@ -285,6 +301,15 @@ export function VoiceAgentConsole() {
             <div className="flex items-center justify-center gap-3 border-t border-border bg-muted/20 p-4"><button onClick={() => { if (!muted) window.speechSynthesis?.cancel(); setMuted(!muted) }} className="rounded-full border border-border p-3 hover:bg-muted" aria-label={muted ? 'Unmute microphone' : 'Mute microphone'}>{muted ? <MicOff className="size-4" /> : <Mic className="size-4" />}</button><button onClick={toggleVoice} className={`flex size-14 items-center justify-center rounded-full ${mode === 'idle' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'bg-destructive text-destructive-foreground'} shadow-sm`} aria-label={mode === 'idle' ? 'Start voice session' : 'Stop voice session'}>{mode === 'idle' ? <Mic className="size-5" /> : <CircleStop className="size-5" />}</button><button className="rounded-full border border-border p-3 hover:bg-muted" aria-label="Audio output"><Volume2 className="size-4" /></button></div>
           </div>
           <div className="mt-5 flex items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2.5 text-xs text-muted-foreground"><span className={`size-1.5 rounded-full ${connected ? 'bg-emerald-500' : 'bg-destructive'}`} /> {connected ? 'Realtime health check is passing' : 'Realtime service is unavailable'} <span className="ml-auto font-mono text-[10px]">{roundTripMs === null ? '—' : `${roundTripMs}ms RTT`}</span></div>
+
+          <section className="mt-4 rounded-2xl border border-border bg-card p-4" aria-labelledby="sandbox-heading">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div><div className="flex items-center gap-2"><span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary"><Zap className="size-3.5" /></span><h2 id="sandbox-heading" className="text-sm font-semibold">Realtime sandbox</h2></div><p className="mt-1 text-xs text-muted-foreground">Live readiness for the browser, reasoning, voice, data, and hospital connector layers.</p></div>
+              <span className="rounded-full border border-primary/20 bg-primary/5 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-primary">{sandboxStatus?.environment ?? 'sandbox'} · {sandboxStatus?.version ?? 'checking'}</span>
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{(sandboxStatus?.services ?? [{ name: 'Checking runtime', status: 'degraded', detail: 'Connecting to the sandbox control plane' }]).map((service) => <div key={service.name} className="rounded-xl border border-border bg-muted/20 p-3"><div className="flex items-center gap-2"><span className={`size-1.5 rounded-full ${service.status === 'ready' ? 'bg-emerald-500' : service.status === 'degraded' ? 'bg-amber-500' : 'bg-destructive'}`} /><span className="text-xs font-medium">{service.name}</span></div><p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">{service.detail}</p></div>)}</div>
+            <p className="mt-3 text-[10px] text-muted-foreground" aria-live="polite">{sandboxStatus ? `Last checked ${new Date(sandboxStatus.checkedAt).toLocaleTimeString([], { hour12: false })}` : 'Checking every 5 seconds'}</p>
+          </section>
 
           <div className="mt-6 rounded-2xl border border-border bg-card"><div className="flex items-center justify-between border-b border-border px-4 py-3"><div className="flex items-center gap-2 text-sm font-medium"><AudioLines className="size-4 text-primary" /> Live transcript</div><button onClick={clearMessages} className="text-xs text-muted-foreground hover:text-foreground">Clear</button></div><div className="max-h-60 space-y-4 overflow-auto p-4">{messages.map((message, index) => <div key={`${message.time}-${index}`} className="flex gap-3"><div className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md ${message.role === 'assistant' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>{message.role === 'assistant' ? <Bot className="size-3.5" /> : message.role === 'user' ? <UserRound className="size-3.5" /> : <Activity className="size-3.5" />}</div><div className="min-w-0"><div className="flex items-center gap-2"><span className="text-xs font-medium capitalize">{message.role}</span><span className="font-mono text-[10px] text-muted-foreground">{message.time}</span></div><p className="mt-1 text-sm leading-6 text-muted-foreground">{message.text}</p></div></div>)}</div><div className="flex items-center gap-2 border-t border-border p-3"><button className="rounded-md p-2 text-muted-foreground hover:bg-muted" aria-label="Attach image"><Paperclip className="size-4" /></button><input value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing && event.keyCode !== 229) submitDraft() }} placeholder="Ask about registration, doctors, testing, or reception…" className="min-w-0 flex-1 bg-transparent px-1 text-sm outline-none placeholder:text-muted-foreground" /><button onClick={submitDraft} disabled={isLoading} className="rounded-md bg-primary p-2 text-primary-foreground hover:bg-primary/90 disabled:cursor-wait disabled:opacity-50" aria-label="Send message"><Send className="size-4" /></button></div></div>
         </section>
