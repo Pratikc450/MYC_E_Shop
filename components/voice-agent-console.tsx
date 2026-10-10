@@ -38,7 +38,8 @@ export function VoiceAgentConsole() {
   const [draft, setDraft] = useState('')
   const [partialTranscript, setPartialTranscript] = useState('')
   const [language, setLanguage] = useState('en-US')
-  const [connected, setConnected] = useState(true)
+  const [connected, setConnected] = useState(false)
+  const [roundTripMs, setRoundTripMs] = useState<number | null>(null)
   const [elapsed, setElapsed] = useState(0)
   const [muted, setMuted] = useState(false)
   const [showTools, setShowTools] = useState(false)
@@ -62,6 +63,24 @@ export function VoiceAgentConsole() {
       output: 'speechSynthesis' in window,
     })
     setSpeechCapabilitiesReady(true)
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    const checkHealth = async () => {
+      const startedAt = performance.now()
+      try {
+        const response = await fetch('/api/health', { cache: 'no-store' })
+        if (!active) return
+        setConnected(response.ok)
+        setRoundTripMs(Math.max(1, Math.round(performance.now() - startedAt)))
+      } catch {
+        if (active) { setConnected(false); setRoundTripMs(null) }
+      }
+    }
+    void checkHealth()
+    const timer = window.setInterval(checkHealth, 10_000)
+    return () => { active = false; window.clearInterval(timer) }
   }, [])
 
   useEffect(() => {
@@ -244,7 +263,7 @@ export function VoiceAgentConsole() {
             <button onClick={() => setActiveTab('reports')} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left ${activeTab === 'reports' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}><Activity className="size-4" /> Report status</button>
             <button onClick={() => { setActiveTab('desk'); setActiveService(null); document.getElementById('schedule-heading')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-muted-foreground hover:bg-muted"><Zap className="size-4" /> Service directory</button>
           </nav>
-          <div className="mt-10 border-t border-border pt-5"><p className="mb-3 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">Transport</p><div className="space-y-3 text-xs text-muted-foreground"><div className="flex justify-between"><span>WebRTC</span><span className="text-foreground">stable</span></div><div className="flex justify-between"><span>Deepgram STT</span><span className="text-emerald-600">ready</span></div><div className="flex justify-between"><span>ElevenLabs TTS</span><span className="text-emerald-600">ready</span></div></div></div>
+          <div className="mt-10 border-t border-border pt-5"><p className="mb-3 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">Transport</p><div className="flex flex-col gap-3 text-xs text-muted-foreground"><div className="flex justify-between"><span>Realtime API</span><span className={connected ? 'text-emerald-600' : 'text-destructive'}>{connected ? 'online' : 'offline'}</span></div><div className="flex justify-between"><span>Speech input</span><span className={speechSupported ? 'text-emerald-600' : 'text-amber-600'}>{speechSupported ? 'ready' : 'fallback'}</span></div><div className="flex justify-between"><span>Speech output</span><span className={speechOutputSupported ? 'text-emerald-600' : 'text-amber-600'}>{speechOutputSupported ? 'ready' : 'fallback'}</span></div></div></div>
         </aside>
 
         <section className="min-w-0">
@@ -265,7 +284,7 @@ export function VoiceAgentConsole() {
             </div>
             <div className="flex items-center justify-center gap-3 border-t border-border bg-muted/20 p-4"><button onClick={() => { if (!muted) window.speechSynthesis?.cancel(); setMuted(!muted) }} className="rounded-full border border-border p-3 hover:bg-muted" aria-label={muted ? 'Unmute microphone' : 'Mute microphone'}>{muted ? <MicOff className="size-4" /> : <Mic className="size-4" />}</button><button onClick={toggleVoice} className={`flex size-14 items-center justify-center rounded-full ${mode === 'idle' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'bg-destructive text-destructive-foreground'} shadow-sm`} aria-label={mode === 'idle' ? 'Start voice session' : 'Stop voice session'}>{mode === 'idle' ? <Mic className="size-5" /> : <CircleStop className="size-5" />}</button><button className="rounded-full border border-border p-3 hover:bg-muted" aria-label="Audio output"><Volume2 className="size-4" /></button></div>
           </div>
-          <div className="mt-5 flex items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2.5 text-xs text-muted-foreground"><Check className="size-3.5 text-emerald-600" /> Voice activity detection is on <span className="ml-auto font-mono text-[10px]">24ms RTT</span></div>
+          <div className="mt-5 flex items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2.5 text-xs text-muted-foreground"><span className={`size-1.5 rounded-full ${connected ? 'bg-emerald-500' : 'bg-destructive'}`} /> {connected ? 'Realtime health check is passing' : 'Realtime service is unavailable'} <span className="ml-auto font-mono text-[10px]">{roundTripMs === null ? '—' : `${roundTripMs}ms RTT`}</span></div>
 
           <div className="mt-6 rounded-2xl border border-border bg-card"><div className="flex items-center justify-between border-b border-border px-4 py-3"><div className="flex items-center gap-2 text-sm font-medium"><AudioLines className="size-4 text-primary" /> Live transcript</div><button onClick={clearMessages} className="text-xs text-muted-foreground hover:text-foreground">Clear</button></div><div className="max-h-60 space-y-4 overflow-auto p-4">{messages.map((message, index) => <div key={`${message.time}-${index}`} className="flex gap-3"><div className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md ${message.role === 'assistant' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>{message.role === 'assistant' ? <Bot className="size-3.5" /> : message.role === 'user' ? <UserRound className="size-3.5" /> : <Activity className="size-3.5" />}</div><div className="min-w-0"><div className="flex items-center gap-2"><span className="text-xs font-medium capitalize">{message.role}</span><span className="font-mono text-[10px] text-muted-foreground">{message.time}</span></div><p className="mt-1 text-sm leading-6 text-muted-foreground">{message.text}</p></div></div>)}</div><div className="flex items-center gap-2 border-t border-border p-3"><button className="rounded-md p-2 text-muted-foreground hover:bg-muted" aria-label="Attach image"><Paperclip className="size-4" /></button><input value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing && event.keyCode !== 229) submitDraft() }} placeholder="Ask about registration, doctors, testing, or reception…" className="min-w-0 flex-1 bg-transparent px-1 text-sm outline-none placeholder:text-muted-foreground" /><button onClick={submitDraft} disabled={isLoading} className="rounded-md bg-primary p-2 text-primary-foreground hover:bg-primary/90 disabled:cursor-wait disabled:opacity-50" aria-label="Send message"><Send className="size-4" /></button></div></div>
         </section>
