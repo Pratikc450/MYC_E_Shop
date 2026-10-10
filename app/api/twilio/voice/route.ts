@@ -1,91 +1,69 @@
+import { createHmac, timingSafeEqual } from 'node:crypto'
 import { generateText } from 'ai'
-import { clinicScheduleResponse, detectEmergency, emergencyResponse, lowConfidenceResponse } from '@/lib/healthcare/orchestrator'
-import { getClientKey, isPayloadTooLarge, isRateLimited, requestId, securityHeaders, withTimeout } from '@/lib/security'
+import { detectEmergency, emergencyResponse } from '@/lib/healthcare/orchestrator'
+import { sanitizeMessage, withTimeout } from '@/lib/security'
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
-function xml(value: string) {
+function xmlEscape(value: string) {
   return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&apos;')
 }
 
-function twiml(body: string, id = requestId()) {
-  const response = new Response(`<?xml version="1.0" encoding="UTF-8"?><Response>${body}</Response>`, {
-    headers: {
-      'Content-Type': 'text/xml; charset=utf-8',
-      'Cache-Control': 'no-store',
-    },
-  })
-  return securityHeaders(response, id)
+function twiml(body: string) {
+  return new Response(body, { headers: { 'Content-Type': 'text/xml; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } })
 }
 
-const TOLL_FREE_NUMBER = '1800-123-4567'
-
-function gather(prompt: string) {
-  return `<Gather input="speech" action="/api/twilio/voice" method="POST" speechTimeout="auto" language="en-IN" actionOnEmptyResult="true"><Say language="en-IN" voice="Polly.Aditi">${xml(prompt)}</Say></Gather>`
+function configured() {
+  return Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_PHONE_NUMBER)
 }
 
-async function isValidTwilioRequest(request: Request, params: URLSearchParams) {
-  const token = process.env.TWILIO_AUTH_TOKEN
-  const signature = request.headers.get('x-twilio-signature')
-  if (!token || !signature) return process.env.NODE_ENV !== 'production'
-
-  const url = new URL(request.url)
-  // Twilio signs the exact request URL followed by parameters in the order
-  // received. Sorting the fields produces a different signature and causes
-  // legitimate production calls to be rejected.
-  const data = [...params.entries()].reduce((value, [key, item]) => value + key + item, url.toString())
-  const crypto = await import('node:crypto')
-  const expected = crypto.createHmac('sha1', token).update(data).digest('base64')
-  const received = Buffer.from(signature, 'utf8')
-  const calculated = Buffer.from(expected, 'utf8')
-  return received.length === calculated.length && crypto.timingSafeEqual(received, calculated)
-}
-
-async function answerFor(message: string) {
-  if (detectEmergency(message)) return emergencyResponse()
-  const scheduleAnswer = clinicScheduleResponse(message)
-  if (scheduleAnswer) return scheduleAnswer
-  if (message.trim().length < 8) return lowConfidenceResponse()
-
-  try {
-    const result = await withTimeout((signal) => generateText({
-      model: 'openai/gpt-4o-mini',
-      abortSignal: signal,
-      system: `You are Arogya Assist, the 24/7 inbound phone agent for the diagnostic center at ${TOLL_FREE_NUMBER}. Callers may be patients, family members, or members of the public calling from outside the hospital. Give one or two short, clear sentences using only the directory schedule for registration, reception, doctors, appointments, and medical testing across Monday through Sunday and morning, afternoon, and evening. Never diagnose, give dosage, disclose private records, or invent live availability. Ask one focused clarification when needed. For emergencies, direct the caller to local emergency services.`,
-      prompt: message,
-      maxOutputTokens: 120,
-    }))
-    return result.text
-  } catch {
-    return 'I can help with doctor schedules, registration, reception, and medical testing. Please say which service and day you need.'
-  }
+function isValidTwilioSignature(url: string, values: Record<string, string>, signature: string, authToken: string) {
+  const payload = url + Object.keys(values).sort().map((key) => key + values[key]).join('')
+  const expected = createHmac('sha1', authToken).update(payload).digest('base64')
+  const received = Buffer.from(signature)
+  const calculated = Buffer.from(expected)
+  return received.length === calculated.length && timingSafeEqual(received, calculated)
 }
 
 export async function POST(request: Request) {
-  const id = requestId()
-  if (isPayloadTooLarge(request) || isRateLimited(`twilio:${getClientKey(request)}`)) {
-    return twiml('<Say language="en-IN" voice="Polly.Aditi">Please try again shortly.</Say><Hangup/>', id)
+  if (!configured()) return twiml('<Response><Say>The phone service is not configured yet. Please use the web voice assistant.</Say><Hangup/></Response>')
+
+  const form = await request.formData().catch(() => null)
+  const signature = request.headers.get('x-twilio-signature')
+  const authToken = process.env.TWILIO_AUTH_TOKEN
+  const signatureUrl = process.env.TWILIO_WEBHOOK_URL || request.url
+  const values = Object.fromEntries(Array.from(form?.entries() ?? []).map(([key, value]) => [key, typeof value === 'string' ? value : '']))
+  if (!signature || !authToken || !isValidTwilioSignature(signatureUrl, values, signature, authToken)) {
+    return new Response('Unauthorized', { status: 401 })
   }
 
-  const params = new URLSearchParams(await request.text())
-  if (!(await isValidTwilioRequest(request, params))) {
-    return securityHeaders(new Response('Forbidden', { status: 403 }), id)
-  }
-
-  const speech = params.get('SpeechResult')?.trim().slice(0, 1200)
+  const speech = sanitizeMessage(form?.get('SpeechResult'))
   if (!speech) {
-    return twiml(`${gather(`Welcome to Arogya Assist on ${TOLL_FREE_NUMBER}. I am available twenty-four hours a day, every day, for hospital information. Please ask about doctor availability, registration hours, reception timing, or medical testing for any day from Monday through Sunday, in the morning, afternoon, or evening.`)}`)
+    return twiml('<Response><Gather input="speech" action="/api/twilio/voice" method="POST" speechTimeout="auto" language="en-IN"><Say>Welcome to Arogya Assist. Please tell me how I can help.</Say></Gather><Say>I did not hear a question. Goodbye.</Say><Hangup/></Response>')
   }
 
-  const answer = await answerFor(speech)
-  if (detectEmergency(speech)) return twiml(`<Say language="en-IN" voice="Polly.Aditi">${xml(answer)}</Say><Hangup/>`)
-  return twiml(`<Say language="en-IN" voice="Polly.Aditi">${xml(answer)}</Say>${gather('You can ask another question, or say goodbye to end the call.')}`)
+  let answer = detectEmergency(speech) ? emergencyResponse() : `I heard: ${speech}. `
+  if (!detectEmergency(speech)) {
+    try {
+      const result = await withTimeout((signal) => generateText({
+        model: 'openai/gpt-4o-mini',
+        abortSignal: signal,
+        system: 'You are Arogya Assist, a hospital information phone agent. Answer in one or two short spoken sentences. Help with registration, reception, doctor availability, appointments, tests, and pharmacy stock. Never diagnose, provide dosage, invent live availability, or expose private data. For emergencies tell the caller to contact local emergency services immediately.',
+        prompt: speech,
+        maxOutputTokens: 120,
+        temperature: 0.35,
+      }))
+      answer = result.text
+    } catch {
+      answer += 'I can help with registration hours, doctors, tests, reception, or report status. Please say one of those topics.'
+    }
+  }
+
+  return twiml(`<Response><Gather input="speech" action="/api/twilio/voice" method="POST" speechTimeout="auto" language="en-IN"><Say>${xmlEscape(answer)}</Say></Gather><Say>Thank you for calling Arogya Assist. Goodbye.</Say><Hangup/></Response>`)
 }
 
 export async function GET() {
-  return twiml(gather(`Welcome to Arogya Assist on ${TOLL_FREE_NUMBER}. Please ask about doctor availability, registration, reception, or medical testing schedules.`))
+  return Response.json({ enabled: configured(), intentModel: configured() ? 'realtime-phone' : 'web-fallback' }, { headers: { 'Cache-Control': 'no-store' } })
 }
 
-export async function HEAD() {
-  return new Response(null, { status: 204 })
-}
