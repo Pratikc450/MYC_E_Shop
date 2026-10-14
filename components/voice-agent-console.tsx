@@ -34,11 +34,11 @@ type Mode = 'idle' | 'listening' | 'thinking' | 'speaking'
 
 export function VoiceAgentConsole() {
   const [mode, setMode] = useState<Mode>('idle')
-  const { messages, isLoading, error, sendMessage, clearMessages } = useVoiceAgent()
+  const { messages, isLoading, error, sendMessage, clearMessages, transportStatus } = useVoiceAgent()
   const [draft, setDraft] = useState('')
   const [partialTranscript, setPartialTranscript] = useState('')
   const [language, setLanguage] = useState('en-US')
-  const [connected, setConnected] = useState(false)
+  const connected = transportStatus === 'connected' || transportStatus === 'fallback'
   const [roundTripMs, setRoundTripMs] = useState<number | null>(null)
   const [elapsed, setElapsed] = useState(0)
   const [muted, setMuted] = useState(false)
@@ -87,12 +87,9 @@ export function VoiceAgentConsole() {
       const startedAt = performance.now()
       try {
         const response = await fetch('/api/health', { cache: 'no-store' })
-        if (!active) return
-        setConnected(response.ok)
-        setRoundTripMs(Math.max(1, Math.round(performance.now() - startedAt)))
-      } catch {
-        if (active) { setConnected(false); setRoundTripMs(null) }
-      }
+        if (active) setRoundTripMs(Math.max(1, Math.round(performance.now() - startedAt)))
+        if (!response.ok && active) setRoundTripMs(null)
+      } catch { if (active) setRoundTripMs(null) }
     }
     void checkHealth()
     const timer = window.setInterval(checkHealth, 10_000)
@@ -260,7 +257,7 @@ export function VoiceAgentConsole() {
           <div className="nova-brand-mark flex size-9 items-center justify-center rounded-xl text-white"><Sparkles className="size-4" /></div>
           <div><p className="font-mono text-[11px] font-semibold tracking-[0.2em] text-primary">AROGYA ASSIST / VOICE OS</p><p className="text-xs text-muted-foreground">Patient information assistant</p></div>
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground"><span className={`size-2 rounded-full ${connected ? 'bg-emerald-500' : 'bg-destructive'}`} /> {connected ? 'Realtime connected' : 'Disconnected'}<button className="ml-3 rounded-md border border-border p-2 hover:bg-muted" aria-label="Settings"><Settings2 className="size-4" /></button></div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground"><span className={`size-2 rounded-full ${transportStatus === 'connected' ? 'bg-emerald-500' : transportStatus === 'fallback' ? 'bg-amber-500' : 'bg-destructive'}`} /> {transportStatus === 'connected' ? 'WebSocket connected' : transportStatus === 'fallback' ? 'HTTP fallback active' : transportStatus === 'connecting' ? 'Connecting realtime' : 'Disconnected'}<button className="ml-3 rounded-md border border-border p-2 hover:bg-muted" aria-label="Settings"><Settings2 className="size-4" /></button></div>
       </header>
 
       <div className="mx-auto max-w-[1440px] px-5 pt-5 lg:px-8 lg:pt-8">
